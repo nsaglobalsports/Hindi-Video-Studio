@@ -625,6 +625,86 @@ async function startServer() {
     });
   };
 
+  // ================= AUTO UPDATE API =================
+
+app.get('/api/app-update', async (req: Request, res: Response) => {
+  try {
+    const currentVersion = String(req.query.version || '1.0.0');
+
+    const response = await fetch(
+      'https://api.github.com/repos/nsaglobalsports/Hindi-Video-Studio/releases/latest',
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'Hindi-Video-Studio'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      res.status(503).json({
+        success: false,
+        message: 'Update information is currently unavailable.'
+      });
+      return;
+    }
+
+    const release = await response.json() as any;
+
+    const apk = release.assets?.find((asset: any) =>
+      String(asset.name).toLowerCase().endsWith('.apk')
+    );
+
+    if (!apk) {
+      res.status(404).json({
+        success: false,
+        message: 'No APK available in latest release.'
+      });
+      return;
+    }
+
+    const latestVersion = String(release.tag_name || '').replace(/^v/i, '');
+
+    const toNumbers = (v: string) =>
+      v.split('.').map(part => Number(part) || 0);
+
+    const current = toNumbers(currentVersion);
+    const latest = toNumbers(latestVersion);
+
+    let updateAvailable = false;
+
+    for (let i = 0; i < Math.max(current.length, latest.length); i++) {
+      const a = current[i] || 0;
+      const b = latest[i] || 0;
+
+      if (b > a) {
+        updateAvailable = true;
+        break;
+      }
+
+      if (b < a) break;
+    }
+
+    res.json({
+      success: true,
+      updateAvailable,
+      currentVersion,
+      latestVersion,
+      versionName: latestVersion,
+      downloadUrl: apk.browser_download_url,
+      releaseNotes: release.body || '',
+      releaseDate: release.published_at
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Unable to check for updates.'
+    });
+  }
+});
+
+// ===================================================
   app.get('/health', handleHealth);
   app.get('/api/health', handleHealth);
 
