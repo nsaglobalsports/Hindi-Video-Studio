@@ -26,8 +26,8 @@ class LocalDraftRepository(context: Context) {
     }
 
     fun loadEndpointUrl(): String =
-        prefs.getString(KEY_ENDPOINT_URL, "https://hindi-video-studio.onrender.com")
-            ?: "https://hindi-video-studio.onrender.com"
+        prefs.getString(KEY_ENDPOINT_URL, "http://192.168.1.100:8000")
+            ?: "http://192.168.1.100:8000"
 
     fun saveEndpointUrl(url: String) {
         prefs.edit().putString(KEY_ENDPOINT_URL, url.trim()).apply()

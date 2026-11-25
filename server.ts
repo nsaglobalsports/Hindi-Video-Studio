@@ -621,12 +621,42 @@ async function startServer() {
       engine: ffmpegInfo,
       tts: 'Edge Neural Hindi TTS (Swara / Madhur)',
       fonts: ['Noto Sans Devanagari', 'DejaVu Sans'],
-      capabilities: ['mp4_render_3d', 'hindi_voiceover', 'topic_auto_facts'],
+      capabilities: ['mp4_render_3d', 'hindi_voiceover', 'topic_auto_facts', 'gemini_ai_scene_generation'],
     });
   };
 
   app.get('/health', handleHealth);
   app.get('/api/health', handleHealth);
+
+  app.post('/api/ai-scenes', async (req: Request, res: Response) => {
+    const body = (req.body || {}) as { mode?: string; input?: string; sceneCount?: number; style?: string; videoType?: string };
+    const input = typeof body.input === 'string' ? body.input.trim() : '';
+    const mode = body.mode === 'script' ? 'script' : 'topic';
+    const sceneCount = Math.min(12, Math.max(3, Number(body.sceneCount || 5)));
+    if (!input) { res.status(400).json({ error: 'कृपया विषय या स्क्रिप्ट लिखें।' }); return; }
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) { res.status(503).json({ error: 'AI Scene Generator चालू करने के लिए Render में GEMINI_API_KEY सेट करें।' }); return; }
+    const prompt = `आप एक अनुभवी हिंदी वीडियो स्क्रिप्ट राइटर और स्टोरीबोर्ड डायरेक्टर हैं। ${mode === 'topic' ? 'दिए गए विषय पर तथ्यात्मक, रोचक हिंदी वीडियो स्क्रिप्ट बनाएं।' : 'दी गई स्क्रिप्ट का अर्थ और तथ्य बदले बिना उसे दृश्यों में बाँटें।'} कुल ${sceneCount} दृश्य बनाएं। शैली: ${body.style || 'Educational / Explainer'}; दृश्य शैली: ${body.videoType || '3D Realistic Graphics Motion'}। प्रत्येक दृश्य के लिए स्वाभाविक बोलचाल की हिंदी voiceScript (लगभग 12-25 शब्द), स्क्रीन पर दिखने वाला छोटा और प्रभावी screenText (2-7 शब्द), तथा विषय से बिल्कुल मेल खाता विस्तृत English visualPrompt लिखें। Visual prompt में दृश्य, विषय, कैमरा, रोशनी, composition बताएं; image में कोई लिखावट/टेक्स्ट न बनवाएं। तथ्यों को न गढ़ें; अनिश्चित जानकारी को दावा न बनाएं। केवल वैध JSON लौटाएं: {"scenes":[{"visualPrompt":"...","voiceScript":"...","screenText":"..."}]}\n\n${mode === 'topic' ? 'विषय: ' : 'मूल स्क्रिप्ट: '}${input}`;
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.65 } }),
+      });
+      const payload = await response.json() as any;
+      if (!response.ok) throw new Error(payload?.error?.message || `Gemini API HTTP ${response.status}`);
+      const raw = payload?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '';
+      const parsed = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/, ''));
+      const scenes = Array.isArray(parsed.scenes) ? parsed.scenes.slice(0, sceneCount).map((scene: any) => ({
+        visualPrompt: String(scene.visualPrompt || '').trim(),
+        voiceScript: String(scene.voiceScript || '').trim(),
+        screenText: String(scene.screenText || '').trim(),
+      })).filter((scene: any) => scene.visualPrompt || scene.voiceScript) : [];
+      if (scenes.length < 2) throw new Error('AI ने पर्याप्त दृश्य नहीं बनाए। फिर से प्रयास करें।');
+      res.json({ scenes, model: 'gemini-2.5-flash' });
+    } catch (error) {
+      res.status(502).json({ error: error instanceof Error ? error.message : 'AI scene generation failed' });
+    }
+  });
 
   app.post('/api/topic-facts', async (req: Request, res: Response) => {
     const body = (req.body || {}) as {

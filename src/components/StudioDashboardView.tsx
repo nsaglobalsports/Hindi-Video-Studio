@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Clapperboard, Info, Plus, Trash2, Volume2 } from 'lucide-react';
+import { Clapperboard, Info, Plus, Sparkles, Trash2, Volume2 } from 'lucide-react';
 import {
   HINDI_VOICES,
   HindiVoiceOption,
@@ -64,6 +64,10 @@ export function StudioDashboardView({
   onGenerateClick,
 }: StudioDashboardViewProps) {
   const [previewingKey, setPreviewingKey] = useState<string | null>(null);
+  const [aiMode, setAiMode] = useState<'topic' | 'script'>('topic');
+  const [aiInput, setAiInput] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [speechNotice, setSpeechNotice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -276,6 +280,38 @@ export function StudioDashboardView({
             if (found) onSelectScriptAi(found);
           }}
         />
+      </section>
+
+      {/* AI Scene Generator */}
+      <section className="space-y-3 rounded-2xl border border-[#7C3AED]/40 bg-gradient-to-br from-[#24134A] to-[#111A2E] p-4">
+        <div className="flex items-center gap-2 text-sm font-bold text-white"><Sparkles className="h-4 w-4 text-[#C4B5FD]" /> AI Scene Generator</div>
+        <p className="text-[11px] leading-relaxed text-[#C4B5FD]">Gemini AI आपके विषय या पूरी स्क्रिप्ट से Visual Prompt, हिंदी Voice-over और Screen Text वाले सीन तैयार करेगा।</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setAiMode('topic')} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${aiMode === 'topic' ? 'border-[#A78BFA] bg-[#7C3AED]/30 text-white' : 'border-[#475569] text-[#CBD5E1]'}`}>Topic से Scenes</button>
+          <button type="button" onClick={() => setAiMode('script')} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${aiMode === 'script' ? 'border-[#A78BFA] bg-[#7C3AED]/30 text-white' : 'border-[#475569] text-[#CBD5E1]'}`}>Script से Scenes</button>
+        </div>
+        <textarea value={aiInput} onChange={e => setAiInput(e.target.value)} rows={4} placeholder={aiMode === 'topic' ? 'वीडियो का विषय लिखें…' : 'अपनी पूरी हिंदी स्क्रिप्ट यहाँ पेस्ट करें…'} className="w-full rounded-xl border border-[#475569] bg-[#0B1222] p-3 text-sm text-white placeholder:text-[#64748B] focus:border-[#A78BFA] focus:outline-none" />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] text-[#CBD5E1]">दृश्यों की संख्या: 3–12 (मौजूदा स्लॉट में भरेंगे)</span>
+          <button type="button" disabled={aiBusy || !aiInput.trim()} onClick={async () => {
+            setAiBusy(true); setAiMessage('AI आपके सीन तैयार कर रहा है…');
+            try {
+              const response = await fetch(`${renderEndpointUrl.replace(/\/+$/, '')}/api/ai-scenes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: aiMode, input: aiInput, sceneCount: Math.max(3, Math.min(12, sceneDrafts.length)), style: selectedStyle, videoType: selectedVideoType.name }) });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+              const generated = Array.isArray(data.scenes) ? data.scenes : [];
+              for (let index = sceneDrafts.length; index < generated.length; index++) onAddSceneSlot();
+              generated.forEach((scene: any, index: number) => {
+                onSceneVisualChange(index, scene.visualPrompt || '');
+                onSceneVoiceChange(index, scene.voiceScript || '');
+                onSceneScreenTextChange(index, scene.screenText || '');
+              });
+              setAiMessage(`${generated.length} सीन तैयार हो गए। अब आप चाहें तो इन्हें एडिट करके वीडियो बनाएं।`);
+            } catch (error) { setAiMessage(error instanceof Error ? error.message : 'AI Scene Generator में समस्या आई।'); }
+            finally { setAiBusy(false); }
+          }} className="inline-flex items-center gap-2 rounded-xl bg-[#7C3AED] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Sparkles className="h-4 w-4" />{aiBusy ? 'Generating…' : 'Generate Scenes'}</button>
+        </div>
+        {aiMessage && <p className="text-xs text-[#DDD6FE]">{aiMessage}</p>}
       </section>
 
       {/* Scene-Wise Visual Prompt + Voice-Over Script (5 Default Scenes + Add Scene Button) */}
