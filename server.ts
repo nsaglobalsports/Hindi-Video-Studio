@@ -627,82 +627,161 @@ async function startServer() {
 
   // ================= AUTO UPDATE API =================
 
-app.get('/api/app-update', async (req: Request, res: Response) => {
-  try {
-    const currentVersion = String(req.query.version || '1.0.0');
+  const GITHUB_RELEASE_API =
+    'https://api.github.com/repos/nsaglobalsports/Hindi-Video-Studio/releases/latest';
 
-    const response = await fetch(
-      'https://api.github.com/repos/nsaglobalsports/Hindi-Video-Studio/releases/latest',
-      {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'Hindi-Video-Studio'
-        }
-      }
-    );
+  function getGitHubHeaders(accept = 'application/vnd.github+json') {
+    const token = process.env.GITHUB_TOKEN;
+
+    return {
+      Accept: accept,
+      'User-Agent': 'Hindi-Video-Studio',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }
+
+  async function getLatestGitHubRelease() {
+    if (!process.env.GITHUB_TOKEN) {
+      throw new Error('GITHUB_TOKEN is not configured in Render Environment.');
+    }
+
+    const response = await fetch(GITHUB_RELEASE_API, {
+      headers: getGitHubHeaders(),
+    });
 
     if (!response.ok) {
-      res.status(503).json({
-        success: false,
-        message: 'Update information is currently unavailable.'
-      });
-      return;
+      const details = await response.text().catch(() => '');
+      console.error(
+        `GitHub latest release request failed: HTTP ${response.status}`,
+        details.slice(0, 500)
+      );
+      throw new Error(`GitHub release request failed with HTTP ${response.status}`);
     }
 
-    const release = await response.json() as any;
+    return await response.json() as any;
+  }
 
-    const apk = release.assets?.find((asset: any) =>
-      String(asset.name).toLowerCase().endsWith('.apk')
-    );
-
-    if (!apk) {
-      res.status(404).json({
-        success: false,
-        message: 'No APK available in latest release.'
-      });
-      return;
-    }
-
-    const latestVersion = String(release.tag_name || '').replace(/^v/i, '');
-
-    const toNumbers = (v: string) =>
-      v.split('.').map(part => Number(part) || 0);
+  function compareVersions(currentVersion: string, latestVersion: string): number {
+    const toNumbers = (version: string) =>
+      version.replace(/^v/i, '').split('.').map(part => Number(part) || 0);
 
     const current = toNumbers(currentVersion);
     const latest = toNumbers(latestVersion);
 
-    let updateAvailable = false;
-
     for (let i = 0; i < Math.max(current.length, latest.length); i++) {
-      const a = current[i] || 0;
-      const b = latest[i] || 0;
+      const currentPart = current[i] || 0;
+      const latestPart = latest[i] || 0;
 
-      if (b > a) {
-        updateAvailable = true;
-        break;
-      }
-
-      if (b < a) break;
+      if (latestPart > currentPart) return 1;
+      if (latestPart < currentPart) return -1;
     }
 
-    res.json({
-      success: true,
-      updateAvailable,
-      currentVersion,
-      latestVersion,
-      versionName: latestVersion,
-      downloadUrl: apk.browser_download_url,
-      releaseNotes: release.body || '',
-      releaseDate: release.published_at
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Unable to check for updates.'
-    });
+    return 0;
   }
-});
+
+  app.get('/api/app-update', async (req: Request, res: Response) => {
+    try {
+      const currentVersion = String(req.query.version || '1.0.0').trim();
+      const release = await getLatestGitHubRelease();
+
+      const apk = release.assets?.find((asset: any) =>
+        typeof asset.name === 'string' &&
+        asset.name.toLowerCase().endsWith('.apk')
+      );
+
+      if (!apk) {
+        res.status(404).json({
+          success: false,
+          message: 'No APK available in the latest published release.',
+        });
+        return;
+      }
+
+      const latestVersion = String(release.tag_name || '').replace(/^v/i, '');
+
+      if (!latestVersion) {
+        res.status(502).json({
+          success: false,
+          message: 'Latest release does not have a valid version tag.',
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        updateAvailable: compareVersions(currentVersion, latestVersion) > 0,
+        currentVersion,
+        latestVersion,
+        versionName: latestVersion,
+        // Private GitHub APKs must be downloaded through this backend proxy.
+        downloadUrl: 'https://hindi-video-studio.onrender.com/api/app-update/download',
+        releaseNotes: release.body || '',
+        releaseDate: release.published_at || null,
+      });
+    } catch (error) {
+      console.error('App update check failed:', error);
+      res.status(503).json({
+        success: false,
+        message: 'Update information is currently unavailable.',
+      });
+    }
+  });
+
+  app.get('/api/app-update/download', async (_req: Request, res: Response) => {
+    try {
+      const release = await getLatestGitHubRelease();
+
+      const apk = release.assets?.find((asset: any) =>
+        typeof asset.name === 'string' &&
+        asset.name.toLowerCase().endsWith('.apk')
+      );
+
+      if (!apk || !apk.url) {
+        res.status(404).send('APK not found in the latest published release.');
+        return;
+      }
+
+      // GitHub's asset API may redirect to a temporary download URL.
+      const apkResponse = await fetch(String(apk.url), {
+        headers: getGitHubHeaders('application/octet-stream'),
+        redirect: 'follow',
+      });
+
+      if (!apkResponse.ok || !apkResponse.body) {
+        const details = await apkResponse.text().catch(() => '');
+        console.error(
+          `GitHub APK download failed: HTTP ${apkResponse.status}`,
+          details.slice(0, 500)
+        );
+        res.status(502).send('Unable to download the APK from GitHub.');
+        return;
+      }
+
+      res.status(200);
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${String(apk.name).replace(/["\\\r\n]/g, '_')}"`
+      );
+
+      const contentLength = apkResponse.headers.get('content-length');
+      if (contentLength) {
+        res.setHeader('Content-Length', contentLength);
+      }
+
+      // Stream the APK to avoid buffering the entire file in server memory.
+      const { Readable } = await import('node:stream');
+      Readable.fromWeb(apkResponse.body as any).pipe(res);
+    } catch (error) {
+      console.error('APK download route failed:', error);
+      if (!res.headersSent) {
+        res.status(503).send('APK download is currently unavailable.');
+      } else {
+        res.end();
+      }
+    }
+  });
 
 // ===================================================
   app.get('/health', handleHealth);
