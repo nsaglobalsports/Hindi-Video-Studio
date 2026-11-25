@@ -1,0 +1,6 @@
+{
+  "name": "Hindi Video Studio",
+  "description": "Native Kotlin & Jetpack Compose Android video production studio and interactive preview for drafting, configuring, and dispatching Hindi explainer and Shorts videos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

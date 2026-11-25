@@ -1,26 +1,20 @@
-# Hindi Video Studio — Native Android (Kotlin + Jetpack Compose)
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-This directory contains the complete native Android project for **Hindi Video Studio**, structured for Gradle Kotlin DSL (`compileSdk = 35`, `minSdk = 24`) and Jetpack Compose Material 3.
+# Run and deploy your AI Studio app
 
-## Build an Installable APK
+This contains everything you need to run your app locally.
 
-1. Open the `android/` directory in **Android Studio (Ladybug or newer)**, or run from terminal inside `android/` (with Android SDK & Gradle wrapper configured):
-   ```bash
-   ./gradlew assembleDebug
-   ```
-2. Install the generated debug APK onto an Android device or emulator:
-   ```bash
-   adb install app/build/outputs/apk/debug/app-debug.apk
-   ```
-3. To build a release APK, configure a signing config in `app/build.gradle.kts` and run:
-   ```bash
-   ./gradlew assembleRelease
-   ```
+View your app in AI Studio: https://ai.studio/apps/9d03e45c-b813-4671-8ace-ae5bfd47e179
 
-## Self-Hosted Render Node API Contract (Free / No Paid SDKs)
+## Run Locally
 
-Local prompt drafting, format/style/voice/AI selection, storyboard planning, JSON export, and Library persistence work 100% offline on-device. Live MP4 rendering connects to your self-hosted Render Node:
+**Prerequisites:**  Node.js
 
-- `GET /health` → HTTP `200 OK`
-- `POST /api/render` → Accepts JSON payload (`topicPrompt`, `formatId`, `aspectRatio`, `style`, `voiceId`, `scriptAiProvider`, `sceneCount`), returns `{ "jobId": "...", "status": "queued", "progress": 10, "stage": "..." }`
-- `GET /api/jobs/{jobId}` → Returns `{ "jobId": "...", "status": "rendering|completed|failed", "progress": 0..100, "stage": "...", "mp4Url": "https://.../video.mp4" }`
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
