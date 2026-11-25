@@ -16,17 +16,16 @@ export const BRAND_9_16_FOOTER_IMG = '/assets/aistudio/Footer_66d0a2aa.jpg';
 const STORAGE_PROJECTS_KEY = 'hvs_saved_projects_v1';
 const STORAGE_ENDPOINT_KEY = 'hvs_render_node_url_v1';
 
+// Fixed Render Backend URL
 export function getBuiltInRenderNodeUrl(): string {
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-  return 'http://localhost:3000';
+  return 'https://hindi-video-studio.onrender.com';
 }
 
 export function loadSavedProjects(): VideoProject[] {
   try {
     const raw = localStorage.getItem(STORAGE_PROJECTS_KEY);
     if (!raw) return [];
+
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -44,12 +43,23 @@ export function saveProjectsToStorage(projects: VideoProject[]): void {
 
 export function loadRenderNodeUrl(): string {
   const builtIn = getBuiltInRenderNodeUrl();
+
   try {
     const saved = localStorage.getItem(STORAGE_ENDPOINT_KEY);
-    if (!saved || saved === 'http://localhost:8000' || saved === 'http://192.168.1.100:8000') {
+
+    // Replace old or incorrect default URLs
+    if (
+      !saved ||
+      saved === 'http://localhost:3000' ||
+      saved === 'http://localhost:8000' ||
+      saved === 'http://192.168.1.100:8000' ||
+      saved === window.location.origin
+    ) {
+      localStorage.setItem(STORAGE_ENDPOINT_KEY, builtIn);
       return builtIn;
     }
-    return saved;
+
+    return saved.replace(/\/+$/, '');
   } catch {
     return builtIn;
   }
@@ -57,7 +67,7 @@ export function loadRenderNodeUrl(): string {
 
 export function saveRenderNodeUrl(url: string): void {
   try {
-    localStorage.setItem(STORAGE_ENDPOINT_KEY, url.trim());
+    localStorage.setItem(STORAGE_ENDPOINT_KEY, url.trim().replace(/\/+$/, ''));
   } catch {
     // Ignore storage errors
   }
@@ -86,6 +96,7 @@ export function buildSceneStoryboard(
   return active.map((item, idx) => {
     const sceneNumber = idx + 1;
     const effectiveVisual = item.visualPrompt || item.voiceScript || item.screenText;
+
     return {
       sceneNumber,
       durationSec: perSceneDuration,
@@ -110,6 +121,7 @@ export function createProjectRecord(params: {
   status: JobStatus;
 }): VideoProject {
   const now = new Date();
+
   const formattedDate = now.toLocaleString('en-IN', {
     day: '2-digit',
     month: 'short',
@@ -118,7 +130,12 @@ export function createProjectRecord(params: {
     minute: '2-digit',
   });
 
-  const scenes = buildSceneStoryboard(params.sceneDrafts, params.format, params.videoType);
+  const scenes = buildSceneStoryboard(
+    params.sceneDrafts,
+    params.format,
+    params.videoType
+  );
+
   const firstTitle =
     scenes[0]?.voiceScript ||
     scenes[0]?.visualPrompt ||
@@ -154,8 +171,12 @@ function normalizeUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, '');
 }
 
-export async function checkRenderNodeHealth(baseUrl: string): Promise<HealthCheckResponse> {
+// Render Node Health Check
+export async function checkRenderNodeHealth(
+  baseUrl: string
+): Promise<HealthCheckResponse> {
   const normalized = normalizeUrl(baseUrl);
+
   if (!normalized) {
     return {
       online: false,
@@ -165,32 +186,33 @@ export async function checkRenderNodeHealth(baseUrl: string): Promise<HealthChec
   }
 
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 3500);
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
   const start = performance.now();
 
   try {
-    let res = await fetch(`${normalized}/api/health`, {
+    const res = await fetch(`${normalized}/api/health`, {
       method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
       signal: controller.signal,
+      cache: 'no-store',
     });
 
-    if (res.status === 404) {
-      res = await fetch(`${normalized}/health`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-    }
-
     const elapsed = Math.round(performance.now() - start);
+
     window.clearTimeout(timeout);
 
     if (res.ok) {
       const contentType = res.headers.get('content-type') || '';
+
       if (contentType.includes('application/json')) {
         const data = (await res.json().catch(() => null)) as {
           online?: boolean;
           engine?: string;
+          status?: string;
         } | null;
+
         if (data && data.online === false) {
           return {
             online: false,
@@ -198,6 +220,7 @@ export async function checkRenderNodeHealth(baseUrl: string): Promise<HealthChec
             detail: 'Render Node reported unavailable',
           };
         }
+
         return {
           online: true,
           latencyMs: elapsed,
@@ -221,10 +244,12 @@ export async function checkRenderNodeHealth(baseUrl: string): Promise<HealthChec
     };
   } catch (err) {
     window.clearTimeout(timeout);
+
     const message =
       err instanceof DOMException && err.name === 'AbortError'
-        ? 'Connection timed out (3.5s)'
-        : 'Unreachable — start your self-hosted Render Node or check CORS/LAN URL';
+        ? 'Connection timed out (15s)'
+        : 'Unable to connect to Render Backend. Check internet or CORS settings.';
+
     return {
       online: false,
       latencyMs: null,
@@ -242,43 +267,68 @@ export interface RemoteRenderJob {
   error?: string | null;
 }
 
-function resolveMp4Url(baseUrl: string, mp4Url?: string | null): string | null {
+function resolveMp4Url(
+  baseUrl: string,
+  mp4Url?: string | null
+): string | null {
   if (!mp4Url) return null;
-  if (mp4Url.startsWith('http://') || mp4Url.startsWith('https://')) {
+
+  if (
+    mp4Url.startsWith('http://') ||
+    mp4Url.startsWith('https://')
+  ) {
     return mp4Url;
   }
-  return `${normalizeUrl(baseUrl)}${mp4Url.startsWith('/') ? '' : '/'}${mp4Url}`;
+
+  return `${normalizeUrl(baseUrl)}${
+    mp4Url.startsWith('/') ? '' : '/'
+  }${mp4Url}`;
 }
 
+// Hindi Voice Preview
 export async function synthesizeVoicePreviewUrl(
   baseUrl: string,
   text: string,
   voiceId: string
 ): Promise<string | null> {
   const normalized = normalizeUrl(baseUrl);
+
   try {
     const res = await fetch(`${normalized}/api/tts-preview`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voiceId }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        voiceId,
+      }),
     });
+
     if (!res.ok) return null;
+
     const blob = await res.blob();
+
     if (blob.size < 300) return null;
+
     return URL.createObjectURL(blob);
   } catch {
     return null;
   }
 }
 
+// Submit Video Render Job
 export async function submitRenderJob(
   baseUrl: string,
   project: VideoProject
 ): Promise<RemoteRenderJob> {
   const normalized = normalizeUrl(baseUrl);
+
   const res = await fetch(`${normalized}/api/render`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
       topicPrompt: project.topicPrompt,
       formatId: project.format.id,
@@ -288,6 +338,7 @@ export async function submitRenderJob(
       voiceId: project.voiceId,
       scriptAiProvider: project.scriptAiId,
       sceneCount: project.sceneCount,
+
       scenes: project.scenes.map((scene) => ({
         visualPrompt: scene.visualPrompt,
         voiceScript: scene.voiceScript,
@@ -298,37 +349,58 @@ export async function submitRenderJob(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`Render Node HTTP ${res.status}${text ? `: ${text}` : ''}`);
+
+    throw new Error(
+      `Render Node HTTP ${res.status}${text ? `: ${text}` : ''}`
+    );
   }
 
   const job = (await res.json()) as RemoteRenderJob;
-  return { ...job, mp4Url: resolveMp4Url(normalized, job.mp4Url) };
+
+  return {
+    ...job,
+    mp4Url: resolveMp4Url(normalized, job.mp4Url),
+  };
 }
 
+// Poll Video Render Job
 export async function pollRenderJob(
   baseUrl: string,
   jobId: string
 ): Promise<RemoteRenderJob> {
   const normalized = normalizeUrl(baseUrl);
-  const res = await fetch(`${normalized}/api/jobs/${encodeURIComponent(jobId)}`);
+
+  const res = await fetch(
+    `${normalized}/api/jobs/${encodeURIComponent(jobId)}`
+  );
+
   if (!res.ok) {
     throw new Error(`Job status HTTP ${res.status}`);
   }
+
   const job = (await res.json()) as RemoteRenderJob;
-  return { ...job, mp4Url: resolveMp4Url(normalized, job.mp4Url) };
+
+  return {
+    ...job,
+    mp4Url: resolveMp4Url(normalized, job.mp4Url),
+  };
 }
 
+// Map Remote Job Status
 export function mapRemoteStatus(remoteStatus: string): JobStatus {
   switch (remoteStatus.toLowerCase()) {
     case 'completed':
     case 'done':
       return 'completed';
+
     case 'failed':
     case 'error':
       return 'failed';
+
     case 'rendering':
     case 'processing':
       return 'rendering';
+
     default:
       return 'queued';
   }
