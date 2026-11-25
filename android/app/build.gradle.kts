@@ -23,18 +23,29 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file(
-                project.findProperty("android.injected.signing.store.file") as String
-            )
-            storePassword =
-                project.findProperty("android.injected.signing.store.password") as String
-            keyAlias =
-                project.findProperty("android.injected.signing.key.alias") as String
-            keyPassword =
-                project.findProperty("android.injected.signing.key.password") as String
+    create("release") {
+        val keystorePath =
+            project.findProperty("android.injected.signing.store.file")?.toString()
+        val keystorePass =
+            project.findProperty("android.injected.signing.store.password")?.toString()
+        val alias =
+            project.findProperty("android.injected.signing.key.alias")?.toString()
+        val keyPass =
+            project.findProperty("android.injected.signing.key.password")?.toString()
+
+        if (
+            !keystorePath.isNullOrBlank() &&
+            !keystorePass.isNullOrBlank() &&
+            !alias.isNullOrBlank() &&
+            !keyPass.isNullOrBlank()
+        ) {
+            storeFile = file(keystorePath)
+            storePassword = keystorePass
+            keyAlias = alias
+            keyPassword = keyPass
         }
     }
+}
 
     buildTypes {
         release {
