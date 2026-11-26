@@ -14,123 +14,119 @@ type SceneVisualTheme =
   | 'studio';
 
 function detectSceneTheme(combinedText: string): SceneVisualTheme {
-  const t = combinedText.toLowerCase();
+  const t = combinedText.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  // Hindi keywords: phrase matching
+  const hasHindi = (...words: string[]) =>
+    words.some((word) => t.includes(word));
+
+  // English keywords: exact word matching
+  // Example: "ai" will match AI, but not "training".
+  const hasEnglish = (...words: string[]) =>
+    words.some((word) => {
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`(^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`, 'i');
+      return pattern.test(t);
+    });
+
+  // SPACE
   if (
-    t.includes('अंतरिक्ष') ||
-    t.includes('चांद') ||
-    t.includes('चंद्रयान') ||
-    t.includes('ब्लैक होल') ||
-    t.includes('सौर') ||
-    t.includes('तारा') ||
-    t.includes('ब्रह्मांड') ||
-    t.includes('रॉकेट') ||
-    t.includes('space') ||
-    t.includes('moon') ||
-    t.includes('planet') ||
-    t.includes('rocket') ||
-    t.includes('black hole') ||
-    t.includes('isro') ||
-    t.includes('star') ||
-    t.includes('galaxy') ||
-    t.includes('mars')
+    hasHindi(
+      'अंतरिक्ष', 'चांद', 'चंद्रयान', 'ब्लैक होल',
+      'सौर', 'तारा', 'ब्रह्मांड', 'रॉकेट'
+    ) ||
+    hasEnglish(
+      'space', 'moon', 'planet', 'rocket',
+      'black hole', 'isro', 'star', 'galaxy', 'mars'
+    )
   ) {
     return 'space';
   }
+
+  // MONUMENT & HISTORY
   if (
-    t.includes('ताजमहल') ||
-    t.includes('taj mahal') ||
-    t.includes('किला') ||
-    t.includes('मंदिर') ||
-    t.includes('इतिहास') ||
-    t.includes('मुगल') ||
-    t.includes('आगरा') ||
-    t.includes('दिल्ली') ||
-    t.includes('स्मारक') ||
-    t.includes('monument') ||
-    t.includes('history') ||
-    t.includes('heritage') ||
-    t.includes('fort') ||
-    t.includes('temple') ||
-    t.includes('palace')
+    hasHindi(
+      'ताजमहल', 'किला', 'मंदिर', 'इतिहास',
+      'मुगल', 'आगरा', 'दिल्ली', 'स्मारक', 'विरासत'
+    ) ||
+    hasEnglish(
+      'taj mahal', 'monument', 'history', 'heritage',
+      'fort', 'temple', 'palace'
+    )
   ) {
     return 'monument';
   }
+
+  // TECHNOLOGY
   if (
-    t.includes('ai') ||
-    t.includes('एआई') ||
-    t.includes('tech') ||
-    t.includes('डिजिटल') ||
-    t.includes('upi') ||
-    t.includes('यूपीआई') ||
-    t.includes('computer') ||
-    t.includes('न्यूरल') ||
-    t.includes('robot') ||
-    t.includes('रोबोट') ||
-    t.includes('इंटरनेट') ||
-    t.includes('मोबाइल') ||
-    t.includes('cyber') ||
-    t.includes('chip')
+    hasHindi(
+      'एआई', 'तकनीक', 'डिजिटल', 'यूपीआई',
+      'न्यूरल', 'रोबोट', 'इंटरनेट', 'मोबाइल',
+      'साइबर', 'चिप', 'कंप्यूटर'
+    ) ||
+    hasEnglish(
+      'ai', 'artificial intelligence', 'tech',
+      'technology', 'digital', 'upi', 'computer',
+      'neural', 'robot', 'cyber', 'chip', 'internet',
+      'mobile', 'software', 'hardware'
+    )
   ) {
     return 'tech';
   }
+
+  // SCIENCE
   if (
-    t.includes('विज्ञान') ||
-    t.includes('science') ||
-    t.includes('dna') ||
-    t.includes('चिकित्सा') ||
-    t.includes('परमाणु') ||
-    t.includes('भौतिक') ||
-    t.includes('रसायन') ||
-    t.includes('कोशिका') ||
-    t.includes('brain') ||
-    t.includes('मस्तिष्क') ||
-    t.includes('doctor') ||
-    t.includes('lab')
+    hasHindi(
+      'विज्ञान', 'डीएनए', 'चिकित्सा', 'परमाणु',
+      'भौतिक', 'रसायन', 'कोशिका', 'मस्तिष्क',
+      'प्रयोगशाला'
+    ) ||
+    hasEnglish(
+      'science', 'dna', 'medical', 'medicine',
+      'physics', 'chemistry', 'cell', 'brain',
+      'doctor', 'laboratory', 'lab', 'research'
+    )
   ) {
     return 'science';
   }
+
+  // NATURE & ENVIRONMENT
   if (
-    t.includes('सुबह') ||
-    t.includes('morning') ||
-    t.includes('स्वास्थ्य') ||
-    t.includes('health') ||
-    t.includes('योग') ||
-    t.includes('nature') ||
-    t.includes('धूप') ||
-    t.includes('जल') ||
-    t.includes('नदी') ||
-    t.includes('पर्वत') ||
-    t.includes('हिमालय') ||
-    t.includes('जंगल') ||
-    t.includes('पेड़') ||
-    t.includes('forest') ||
-    t.includes('river') ||
-    t.includes('mountain') ||
-    t.includes('climate') ||
-    t.includes('earth')
+    hasHindi(
+      'सुबह', 'स्वास्थ्य', 'योग', 'धूप',
+      'जल', 'नदी', 'पर्वत', 'हिमालय',
+      'जंगल', 'पेड़', 'प्रकृति', 'पर्यावरण',
+      'जलवायु', 'पृथ्वी'
+    ) ||
+    hasEnglish(
+      'morning', 'health', 'yoga', 'nature',
+      'sunlight', 'water', 'river', 'mountain',
+      'forest', 'tree', 'climate', 'earth',
+      'environment', 'wildlife', 'ocean'
+    )
   ) {
     return 'nature';
   }
+
+  // ECONOMY & FINANCE
   if (
-    t.includes('अर्थव्यवस्था') ||
-    t.includes('economy') ||
-    t.includes('बैंक') ||
-    t.includes('व्यापार') ||
-    t.includes('बाज़ार') ||
-    t.includes('रुपये') ||
-    t.includes('बजट') ||
-    t.includes('पैसा') ||
-    t.includes('money') ||
-    t.includes('business') ||
-    t.includes('growth') ||
-    t.includes('market') ||
-    t.includes('finance')
+    hasHindi(
+      'अर्थव्यवस्था', 'बैंक', 'व्यापार',
+      'बाज़ार', 'बाजार', 'रुपये', 'बजट',
+      'पैसा', 'वित्त', 'महंगाई', 'शेयर बाजार'
+    ) ||
+    hasEnglish(
+      'economy', 'bank', 'business', 'market',
+      'money', 'budget', 'finance', 'financial',
+      'growth', 'investment', 'stock market',
+      'inflation', 'currency'
+    )
   ) {
     return 'economy';
   }
+
   return 'studio';
 }
-
 function build3DSpaceLayer(w: number, h: number, sceneNumber: number): string {
   const shiftX = ((sceneNumber % 3) - 1) * Math.round(w * 0.06);
   const cx = Math.round(w * 0.5) + shiftX;
