@@ -25,9 +25,19 @@ class LocalDraftRepository(context: Context) {
         prefs.edit().putString(KEY_PROJECTS, json.encodeToString(projects)).apply()
     }
 
-    fun loadEndpointUrl(): String =
-        prefs.getString(KEY_ENDPOINT_URL, "http://192.168.1.100:8000")
-            ?: "http://192.168.1.100:8000"
+    fun loadEndpointUrl(): String {
+        val saved = prefs.getString(KEY_ENDPOINT_URL, null)?.trim().orEmpty()
+        // Migrate the old sample LAN address and local development URLs to production.
+        val shouldMigrate = saved.isBlank() ||
+            saved == "http://192.168.1.100:8000" ||
+            saved == "http://localhost:3000" ||
+            saved == "http://localhost:8000"
+        if (shouldMigrate) {
+            prefs.edit().putString(KEY_ENDPOINT_URL, DEFAULT_RENDER_URL).apply()
+            return DEFAULT_RENDER_URL
+        }
+        return saved.removeSuffix("/")
+    }
 
     fun saveEndpointUrl(url: String) {
         prefs.edit().putString(KEY_ENDPOINT_URL, url.trim()).apply()
@@ -39,5 +49,6 @@ class LocalDraftRepository(context: Context) {
     private companion object {
         const val KEY_PROJECTS = "saved_video_projects_v1"
         const val KEY_ENDPOINT_URL = "render_node_endpoint_url"
+        const val DEFAULT_RENDER_URL = "https://hindi-video-studio.onrender.com"
     }
 }

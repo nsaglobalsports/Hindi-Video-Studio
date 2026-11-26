@@ -53,6 +53,8 @@ export function loadRenderNodeUrl(): string {
       saved === 'http://localhost:3000' ||
       saved === 'http://localhost:8000' ||
       saved === 'http://192.168.1.100:8000' ||
+      saved === 'http://localhost:3000' ||
+      saved === 'http://localhost:8000' ||
       saved === window.location.origin
     ) {
       localStorage.setItem(STORAGE_ENDPOINT_KEY, builtIn);

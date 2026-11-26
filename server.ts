@@ -681,6 +681,9 @@ async function startServer() {
   }
 
   app.get('/api/app-update', async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     try {
       const currentVersion = String(req.query.version || '1.0.0').trim();
       const release = await getLatestGitHubRelease();

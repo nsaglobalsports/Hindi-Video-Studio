@@ -213,6 +213,9 @@ export default function App() {
       status: 'local_draft',
     });
 
+    // Persist immediately so the draft remains in Library even if Render is offline.
+    upsertProject(draftProject);
+
     if (renderNode.status !== 'online') {
       setActiveScreen('progress');
       setGenerationState({
@@ -273,11 +276,12 @@ export default function App() {
             stopPolling();
           }
         } catch (err) {
-          stopPolling();
+          // A brief mobile-network interruption must not abandon an active render.
           setGenerationState((prev) => ({
             ...prev,
+            stageLabel: 'Reconnecting to Render Server…',
             errorMessage:
-              err instanceof Error ? `Polling stopped: ${err.message}` : 'Polling failed',
+              err instanceof Error ? `Connection retrying: ${err.message}` : 'Connection retrying…',
           }));
         }
       }, 1500);

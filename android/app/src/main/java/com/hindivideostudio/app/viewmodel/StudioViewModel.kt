@@ -168,8 +168,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun updateRenderNodeUrl(url: String) {
         repository.saveEndpointUrl(url)
         _uiState.update {
-            it.copy(renderNode = it.renderNode.copy(endpointUrl = url))
+            it.copy(renderNode = it.renderNode.copy(endpointUrl = url.trim().removeSuffix("/")))
         }
+        checkRenderNodeHealth()
     }
 
     fun checkRenderNodeHealth() {
@@ -215,6 +216,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         val draftProject = buildProjectFromState(state, activeDrafts, JobStatus.LOCAL_DRAFT)
+        // Save immediately so a failed/slow render request never loses the user's project.
+        upsertProjectInLibrary(draftProject)
 
         if (state.renderNode.status != NodeConnectionStatus.ONLINE) {
             _uiState.update {
@@ -285,10 +288,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val jobId = project.remoteJobId ?: return
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
+            var consecutiveFailures = 0
             while (isActive) {
-                delay(1500L)
+                delay(2500L)
                 val poll = renderClient.pollJobStatus(endpointUrl, jobId)
                 poll.onSuccess { resp ->
+                    consecutiveFailures = 0
                     val mappedStatus = renderClient.mapRemoteStatus(resp.status)
                     val updatedProject = project.copy(
                         status = mappedStatus,
@@ -309,14 +314,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                         pollingJob?.cancel()
                     }
                 }.onFailure { err ->
+                    consecutiveFailures += 1
                     _uiState.update {
                         it.copy(
                             generationState = it.generationState.copy(
-                                errorMessage = "Polling paused: ${err.localizedMessage}"
+                                stageLabel = "Reconnecting to Render Server…",
+                                errorMessage = if (consecutiveFailures >= 5)
+                                    "Render server से संपर्क नहीं हो पा रहा। फिर से जाँच जारी है: ${err.localizedMessage}"
+                                else
+                                    "Connection retry $consecutiveFailures/5…"
                             )
                         )
                     }
-                    pollingJob?.cancel()
+                    // Keep polling: temporary mobile-network changes must not abandon a render.
                 }
             }
         }
@@ -336,7 +346,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun returnFromProgressToStudio() {
-        pollingJob?.cancel()
+        // Keep the job monitor alive while the user navigates to the Studio or Library.
         _uiState.update { it.copy(activeScreen = ActiveScreen.MAIN_DASHBOARD) }
     }
 

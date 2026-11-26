@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private val downloadKey = "pending_update_download"
 
     private var installDialogShowing = false
+    private var updateDialogShowing = false
     private var downloadChecking = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -213,7 +214,8 @@ class MainActivity : ComponentActivity() {
 
             if (result != null &&
                 result.optBoolean("success") &&
-                result.optBoolean("updateAvailable")
+                result.optBoolean("updateAvailable") &&
+                !isFinishing && !isDestroyed && !updateDialogShowing
             ) {
 
                 val latestVersion =
@@ -242,6 +244,8 @@ class MainActivity : ComponentActivity() {
         downloadUrl: String,
         notes: String
     ) {
+        if (isFinishing || isDestroyed || updateDialogShowing) return
+        updateDialogShowing = true
 
         AlertDialog.Builder(this)
             .setTitle("नया अपडेट उपलब्ध है!")
@@ -253,11 +257,14 @@ class MainActivity : ComponentActivity() {
             )
             .setCancelable(false)
             .setPositiveButton("अभी अपडेट करें") { _, _ ->
+                updateDialogShowing = false
                 downloadUpdate(downloadUrl, version)
             }
             .setNegativeButton("बाद में") { dialog, _ ->
+                updateDialogShowing = false
                 dialog.dismiss()
             }
+            .setOnCancelListener { updateDialogShowing = false }
             .show()
     }
 
@@ -474,6 +481,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!isFinishing && !isDestroyed) checkForAppUpdate()
 
         val downloadId = getSharedPreferences(
             updatePrefs,
