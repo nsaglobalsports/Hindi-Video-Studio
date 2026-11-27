@@ -156,32 +156,6 @@ fun StudioHeader(
             }
         }
 
-        // Top Segmented Studio | Library Tab Switch
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 12.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(StudioColors.DeepNavyCanvas)
-                .border(1.dp, StudioColors.BorderHairline, RoundedCornerShape(12.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            StudioTabButton(
-                label = "Studio",
-                selected = activeTab == StudioTab.STUDIO,
-                onClick = { onSelectTab(StudioTab.STUDIO) },
-                modifier = Modifier.weight(1f)
-            )
-            StudioTabButton(
-                label = "Library",
-                selected = activeTab == StudioTab.LIBRARY,
-                onClick = { onSelectTab(StudioTab.LIBRARY) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
         HorizontalDivider(color = StudioColors.BorderHairline, thickness = 1.dp)
     }
 }
