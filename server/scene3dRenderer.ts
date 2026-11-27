@@ -38,6 +38,7 @@ type SceneVisualSubject =
   | 'currency'
   | 'farm'
   | 'education'
+  | 'recruitment'
   | 'sports'
   | 'generic';
 
@@ -135,13 +136,13 @@ function detectSceneTheme(combinedText: string): SceneVisualTheme {
     hasHindi(
       'अर्थव्यवस्था', 'बैंक', 'व्यापार',
       'बाज़ार', 'बाजार', 'रुपये', 'बजट',
-      'पैसा', 'वित्त', 'महंगाई', 'शेयर बाजार'
+      'पैसा', 'वित्त', 'महंगाई', 'शेयर बाजार', 'नौकरी', 'भर्ती', 'रोजगार', 'वैकेंसी', 'वैकेंसी', 'नियुक्ति'
     ) ||
     hasEnglish(
       'economy', 'bank', 'business', 'market',
       'money', 'budget', 'finance', 'financial',
       'growth', 'investment', 'stock market',
-      'inflation', 'currency'
+      'inflation', 'currency', 'recruitment', 'vacancy', 'employment', 'career', 'government job', 'apprentice'
     )
   ) {
     return 'economy';
@@ -273,6 +274,11 @@ function detectSceneSubject(combinedText: string): SceneVisualSubject {
     hasHindi('सौर ऊर्जा', 'सोलर पैनल', 'सूर्य ऊर्जा') ||
     hasEnglish('solar energy', 'solar panel', 'solar power')
   ) return 'solar';
+
+  if (
+    hasHindi('सरकारी नौकरी', 'नौकरी', 'भर्ती', 'रिक्ति', 'वैकेंसी', 'रोजगार', 'आवेदन', 'नियुक्ति', 'अप्रेंटिस', 'चयन प्रक्रिया', 'प्रवेश पत्र', 'एडमिट कार्ड') ||
+    hasEnglish('recruitment', 'vacancy', 'vacancies', 'employment', 'career', 'government job', 'job application', 'apprenticeship', 'admit card', 'selection process')
+  ) return 'recruitment';
 
   if (
     hasHindi('परीक्षा', 'छात्र', 'विद्यार्थी', 'स्कूल', 'कॉलेज', 'पढ़ाई', 'किताब') ||
@@ -1459,6 +1465,26 @@ function buildSubjectVisualLayer(
       `;
       break;
 
+    case 'recruitment':
+      visual = `
+        <g transform="translate(${cx},${cy})">
+          <rect x="${-s * 1.75}" y="${-s * 1.18}" width="${s * 1.25}" height="${s * 1.72}"
+            rx="${s * 0.12}" fill="#F8FAFC" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+          <path d="M ${-s * 1.48} ${-s * 0.72} h ${s * 0.7} M ${-s * 1.48} ${-s * 0.38} h ${s * 0.7} M ${-s * 1.48} ${-s * 0.04} h ${s * 0.48}"
+            stroke="#2563EB" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="${s * 0.35}" cy="${-s * 0.72}" r="${s * 0.43}" fill="#F1C7A5" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+          <path d="M ${-s * 0.42} ${s * 0.9} Q ${-s * 0.28} ${-s * 0.18} ${s * 0.35} ${-s * 0.18} Q ${s} ${-s * 0.18} ${s * 1.08} ${s * 0.9} Z"
+            fill="#1D4ED8" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+          <rect x="${s * 0.92}" y="${s * 0.18}" width="${s * 1.05}" height="${s * 0.78}"
+            rx="${s * 0.12}" fill="#D97706" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+          <path d="M ${s * 1.2} ${s * 0.18} v ${-s * 0.22} q 0 ${-s * 0.25} ${s * 0.25} ${-s * 0.25} h ${s * 0.05} q ${s * 0.25} 0 ${s * 0.25} ${s * 0.25} v ${s * 0.22}"
+            fill="none" stroke="#FDE68A" stroke-width="6"/>
+          <path d="M ${s * 1.18} ${s * 0.55} l ${s * 0.18} ${s * 0.18} l ${s * 0.36} ${-s * 0.4}"
+            fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      `;
+      break;
+
     case 'sports':
       visual = `
         <g transform="translate(${cx},${cy})">
@@ -2012,7 +2038,7 @@ export function buildCaptionOverlaySvg(params: {
     maxLinesShown * lineHeight + 54
   );
 
-  const bottomReserved = isVertical ? 154 : 34;
+  const bottomReserved = isVertical ? 228 : 34;
   const cardY = height - cardHeight - bottomReserved;
 
   return `
@@ -2085,7 +2111,7 @@ export function buildAnimatedScreenTextAss(params: {
     maxLinesShown * lineHeight + 54
   );
 
-  const bottomReserved = isVertical ? 154 : 34;
+  const bottomReserved = isVertical ? 228 : 34;
 
   const cardCenterY =
     height -
@@ -2138,42 +2164,39 @@ export function buildAnimatedScreenTextAss(params: {
     validTimings
   );
 
-  const hasAnyRealMatch = matchedTimings.some(
-    (item) => item !== null
-  );
-
   const totalWeight = allScreenWords.reduce(
-    (sum, word) => sum + Math.max(1, word.length),
+    (sum, word) => sum + Math.max(1, Array.from(word).length),
     0
   );
 
   const fallbackWordTimings: VoiceWordTiming[] = [];
-
-  let fallbackCursor = speechStartMs;
+  let cumulativeWeight = 0;
 
   allScreenWords.forEach((word) => {
-    const duration = Math.max(
-      80,
-      Math.round(
-        (Math.max(1, word.length) / Math.max(1, totalWeight)) *
-          totalSpeechSpanMs
-      )
-    );
+    const weight = Math.max(1, Array.from(word).length);
+    const start = speechStartMs + Math.floor((cumulativeWeight / Math.max(1, totalWeight)) * totalSpeechSpanMs);
+    cumulativeWeight += weight;
+    const end = speechStartMs + Math.floor((cumulativeWeight / Math.max(1, totalWeight)) * totalSpeechSpanMs);
 
     fallbackWordTimings.push({
-      offsetMs: fallbackCursor,
-      durationMs: duration,
+      offsetMs: start,
+      durationMs: Math.max(40, end - start),
       text: word
     });
-
-    fallbackCursor += duration;
   });
 
-  // जिन शब्दों का exact match नहीं मिला, उनके लिए अनुमानित timing।
-  const resolvedTimings = matchedTimings.map(
-    (timing, index) =>
-      timing || fallbackWordTimings[index]
-  );
+  // Partial matching creates mixed, out-of-order timestamps. Use the real
+  // timeline only when every displayed word matched in sequence.
+  const hasCompleteRealMatch =
+    matchedTimings.length === allScreenWords.length &&
+    matchedTimings.every((item, index) =>
+      item !== null &&
+      (index === 0 || item.offsetMs >= (matchedTimings[index - 1]?.offsetMs ?? 0))
+    );
+
+  const resolvedTimings = hasCompleteRealMatch
+    ? matchedTimings as VoiceWordTiming[]
+    : fallbackWordTimings;
 
   const dialogueEvents: string[] = [];
   let globalWordIndex = 0;
@@ -2215,9 +2238,9 @@ export function buildAnimatedScreenTextAss(params: {
       Math.max(0, chunkStartMs)
     );
 
-    const endMs = Math.max(
-      startMs + 300,
-      chunkEndMs
+    const endMs = Math.min(
+      sceneMs,
+      Math.max(startMs + 100, chunkEndMs)
     );
 
     // Actual word timing based karaoke.
@@ -2246,15 +2269,16 @@ export function buildAnimatedScreenTextAss(params: {
         // वास्तविक pause को पिछले karaoke word में जोड़ें।
         const nextStart = nextTiming?.offsetMs;
 
-        let karaokeDuration = currentDuration;
-
-        if (
-          typeof nextStart === 'number' &&
-          nextStart > currentStart + currentDuration
-        ) {
-          karaokeDuration +=
-            nextStart - (currentStart + currentDuration);
-        }
+        const nextBoundary = typeof nextStart === 'number'
+          ? nextStart
+          : sceneMs;
+        const karaokeDuration = Math.max(
+          40,
+          Math.min(
+            Math.max(currentDuration, nextBoundary - currentStart),
+            sceneMs - currentStart
+          )
+        );
 
         // ASS karaoke duration centiseconds में होता है।
         const cs = Math.max(
