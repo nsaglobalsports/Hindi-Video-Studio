@@ -395,7 +395,7 @@ async function processRenderJob(
     let completedPrep = 0;
     const preparedScenes = await mapWithConcurrency(
       activeScenes,
-      3,
+      2,
       async (sceneItem, idx) => {
         const sceneNum = idx + 1;
         const voiceScript = sceneItem.voiceScript.trim();
@@ -434,7 +434,7 @@ async function processRenderJob(
             ? 'Topic Photo Visual'
             : '3D Graphics Visual'
         }) & Hindi voiceover...`;
-
+        persistJobs();
         return {
           sceneNum,
           voiceScript,
@@ -624,7 +624,7 @@ async function processRenderJob(
         '-map',
         '[a]',
         '-threads',
-        '0',
+        '2',
         '-c:v',
         'libx264',
         '-profile:v',
