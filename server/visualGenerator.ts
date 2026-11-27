@@ -56,6 +56,8 @@ const SAFE_CARTOON_MODELS = [
 ];
 
 const OFFLINE_VISUAL_LEXICON: Array<[RegExp, string]> = [
+  [/सरकारी नौकरी|नौकरी|भर्ती|रिक्ति|रोजगार|आवेदन|चयन|अप्रेंटिस|अप्रेंटिसशिप|वैकेंसी|पद|प्रवेश पत्र|एडमिट कार्ड|परीक्षा|नियुक्ति|कर्मचारी/i, 'Indian government job recruitment, job applicant reviewing an official application form, recruitment office, professional candidate, realistic career opportunity scene'],
+  [/recruitment|vacancy|vacancies|government job|employment|apprentice|apprenticeship|job application|admit card|selection process|career/i, 'Indian government job recruitment, job applicant reviewing an official application form, recruitment office, professional candidate, realistic career opportunity scene'],
   [/किसान|kisan|farmer|kheti|खेती|खेत/i, 'indian farmer green farm field'],
   [/ट्रैक्टर|tractor/i, 'red tractor in agricultural field'],
   [/ताजमहल|taj\s*mahal/i, 'Taj Mahal Agra sunrise'],
@@ -99,7 +101,7 @@ function looksMostlyEnglish(text: string): boolean {
   if (hasNonAscii) return false;
   // Detect common Roman Hinglish words so Hinglish prompts also get translated to clean English
   const hinglishMarkers =
-    /\b(ek|kisan|ladka|ladki|baccha|raat|subah|khet|barish|padhai|me|mein|hai|hain|raha|rahi|kar|ke|ki|ka|aur|upar|neeche|chala|ghar|gaav|gaon|duniya|samay|suraj|chand|pani)\b/i;
+    /\b(ek|kisan|ladka|ladki|baccha|raat|subah|khet|barish|padhai|naukri|bharti|rojgar|aavedan|me|mein|hai|hain|raha|rahi|kar|ke|ki|ka|aur|upar|neeche|chala|ghar|gaav|gaon|duniya|samay|suraj|chand|pani)\b/i;
   return !hinglishMarkers.test(text);
 }
 
