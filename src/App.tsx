@@ -39,6 +39,15 @@ import {
 
 const APP_ICON_SRC = '/src/assets/images/hindi_video_studio_icon_1795527559448.jpg';
 
+function loadAutoSavedScenes(): SceneDraftInput[] {
+  try {
+    const raw = localStorage.getItem('hvs_autosave_scenes_v1');
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed) && parsed.length) return parsed.slice(0, 40).map((scene: any) => ({ visualPrompt: String(scene.visualPrompt || ''), voiceScript: String(scene.voiceScript || ''), screenText: String(scene.screenText || '') }));
+  } catch { /* ignore invalid local draft */ }
+  return createEmptySceneDrafts();
+}
+
 function createEmptySceneDrafts(count: number = DEFAULT_SCENE_SLOT_COUNT): SceneDraftInput[] {
   return Array.from({ length: count }, () => ({
     visualPrompt: '',
@@ -59,9 +68,7 @@ export default function App() {
   const [selectedStyle, setSelectedStyle] = useState<VideoStyleName>('Educational / Explainer');
   const [selectedVoice, setSelectedVoice] = useState<HindiVoiceOption>(HINDI_VOICES[0]);
   const [selectedScriptAi, setSelectedScriptAi] = useState<ScriptAiOption>(SCRIPT_AI_PROVIDERS[0]);
-  const [sceneDrafts, setSceneDrafts] = useState<SceneDraftInput[]>(() =>
-    createEmptySceneDrafts()
-  );
+  const [sceneDrafts, setSceneDrafts] = useState<SceneDraftInput[]>(() => loadAutoSavedScenes());
 
   // Render Node State
   const [renderNode, setRenderNode] = useState<RenderNodeState>(() => ({
@@ -72,6 +79,7 @@ export default function App() {
   }));
   const [isNodeModalOpen, setIsNodeModalOpen] = useState(false);
   const [isAndroidDrawerOpen, setIsAndroidDrawerOpen] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   // Library & Generation State
   const [libraryProjects, setLibraryProjects] = useState<VideoProject[]>(() => loadSavedProjects());
@@ -87,6 +95,29 @@ export default function App() {
   });
 
   const pollTimerRef = useRef<number | null>(null);
+  const undoStackRef = useRef<SceneDraftInput[][]>([]);
+  const redoStackRef = useRef<SceneDraftInput[][]>([]);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const recordSceneHistory = () => {
+    undoStackRef.current.push(sceneDrafts.map((scene) => ({ ...scene })));
+    if (undoStackRef.current.length > 40) undoStackRef.current.shift();
+    redoStackRef.current = [];
+    setHistoryRevision((value) => value + 1);
+  };
+  const handleUndo = () => {
+    const previous = undoStackRef.current.pop();
+    if (!previous) return;
+    redoStackRef.current.push(sceneDrafts.map((scene) => ({ ...scene })));
+    setSceneDrafts(previous);
+    setHistoryRevision((value) => value + 1);
+  };
+  const handleRedo = () => {
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current.push(sceneDrafts.map((scene) => ({ ...scene })));
+    setSceneDrafts(next);
+    setHistoryRevision((value) => value + 1);
+  };
 
   const stopPolling = () => {
     if (pollTimerRef.current !== null) {
@@ -116,6 +147,10 @@ export default function App() {
     return () => stopPolling();
   }, []);
 
+  useEffect(() => {
+    try { localStorage.setItem('hvs_autosave_scenes_v1', JSON.stringify(sceneDrafts)); } catch { /* storage quota: keep editing in memory */ }
+  }, [sceneDrafts]);
+
   const upsertProject = (project: VideoProject) => {
     setLibraryProjects((prev) => {
       const next = [project, ...prev.filter((item) => item.id !== project.id)];
@@ -130,6 +165,7 @@ export default function App() {
   };
 
   const handleSceneVisualChange = (index: number, value: string) => {
+    recordSceneHistory();
     setSceneDrafts((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], visualPrompt: value };
@@ -139,6 +175,7 @@ export default function App() {
   };
 
   const handleSceneVoiceChange = (index: number, value: string) => {
+    recordSceneHistory();
     setSceneDrafts((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], voiceScript: value };
@@ -148,6 +185,7 @@ export default function App() {
   };
 
   const handleSceneScreenTextChange = (index: number, value: string) => {
+    recordSceneHistory();
     setSceneDrafts((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], screenText: value };
@@ -156,17 +194,33 @@ export default function App() {
     if (validationError) setValidationError(null);
   };
 
+  const handleMoveScene = (index: number, direction: -1 | 1) => {
+    recordSceneHistory();
+    setSceneDrafts((prev) => {
+      const next = [...prev];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
   const handleAddSceneSlot = () => {
+    recordSceneHistory();
     setSceneDrafts((prev) => [...prev, { visualPrompt: '', voiceScript: '', screenText: '' }]);
   };
 
   const handleClearAllScenes = () => {
+    recordSceneHistory();
     setSceneDrafts(createEmptySceneDrafts(Math.max(DEFAULT_SCENE_SLOT_COUNT, sceneDrafts.length)));
     setValidationError(null);
   };
 
   const handleNewVideo = () => {
     stopPolling();
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setHistoryRevision((value) => value + 1);
     setActiveTab('studio');
     setActiveScreen('dashboard');
     setValidationError(null);
@@ -315,6 +369,9 @@ export default function App() {
   };
 
   const handleEditInStudio = (project: VideoProject) => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setHistoryRevision((value) => value + 1);
     setSelectedFormat(project.format);
     setSelectedVideoType(
       VIDEO_TYPES.find((vt) => vt.id === project.videoTypeId) ?? VIDEO_TYPES[0]
@@ -456,6 +513,11 @@ export default function App() {
             onSceneScreenTextChange={handleSceneScreenTextChange}
             onAddSceneSlot={handleAddSceneSlot}
             onClearAllScenes={handleClearAllScenes}
+            onMoveScene={handleMoveScene}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            canUndo={undoStackRef.current.length > 0 && historyRevision >= 0}
+            canRedo={redoStackRef.current.length > 0}
             onGenerateClick={handleGenerateClick}
           />
         )}
@@ -502,6 +564,12 @@ export default function App() {
           />
         )}
       </div>
+      <nav className="sticky bottom-0 z-20 grid grid-cols-3 border-t border-[#1E293B] bg-[#080D1A]/95 px-3 py-2 backdrop-blur">
+        <button type="button" onClick={() => { setShowAbout(false); setActiveTab('studio'); setActiveScreen('dashboard'); }} className="flex flex-col items-center gap-1 py-1 text-[10px] font-semibold text-[#CBD5E1]"><span>⌂</span>Home</button>
+        <button type="button" onClick={() => { handleNewVideo(); setSelectedFormat(VIDEO_FORMATS.find((format) => format.id === 'youtube_16_9') ?? VIDEO_FORMATS[0]); }} className="mx-auto flex min-w-[112px] flex-col items-center gap-1 rounded-xl bg-[#F97316] px-4 py-2 text-[10px] font-bold text-white"><span className="text-base leading-none">＋</span>16:9 / New Video</button>
+        <button type="button" onClick={() => setShowAbout(true)} className="flex flex-col items-center gap-1 py-1 text-[10px] font-semibold text-[#CBD5E1]"><span>ⓘ</span>About</button>
+      </nav>
+      {showAbout && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4" onClick={() => setShowAbout(false)}><div className="w-full max-w-lg rounded-2xl border border-[#334155] bg-[#111A2E] p-5" onClick={e => e.stopPropagation()}><h2 className="text-lg font-bold">Hindi Video Studio</h2><p className="mt-2 text-sm text-[#CBD5E1]">Disha Manch के लिए हिंदी स्क्रिप्ट, सीन, वॉइसओवर और वीडियो रेंडरिंग स्टूडियो।</p><p className="mt-2 text-xs text-[#94A3B8]">Version 1.0.3 · Render Node: {nodeTextLabel}</p><button type="button" onClick={() => setShowAbout(false)} className="mt-4 w-full rounded-xl bg-[#2563EB] py-3 text-sm font-semibold">Close</button></div></div>}
     </div>
   );
 

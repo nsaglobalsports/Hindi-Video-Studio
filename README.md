@@ -22,6 +22,21 @@ View your app in AI Studio: https://ai.studio/apps/9d03e45c-b813-4671-8ace-ae5bf
 
 ## AI Scene Generator (Gemini)
 
-The Studio now includes **Topic से Scenes** and **Script से Scenes** generation. The backend exposes `POST /api/ai-scenes` and calls Gemini 2.5 Flash server-side. Configure `GEMINI_API_KEY` as a secret environment variable on the Render service (do not place the key in frontend code or commit a real key). The generator returns scene-wise English visual prompts, Hindi voice-over scripts, and concise on-screen text.
+The Studio includes **Topic से Scenes** and **Script से Scenes** generation using Google Gemini 2.5 Flash. The AI generator requires `GEMINI_API_KEY` in the Render environment; manual scene editing remains available without an AI key. The backend exposes `POST /api/ai-scenes` and calls Gemini 2.5 Flash server-side. Configure `GEMINI_API_KEY` as a secret environment variable on the Render service (do not place the key in frontend code or commit a real key). The generator returns scene-wise English visual prompts, Hindi voice-over scripts, and concise on-screen text.
 
 The existing visual pipeline generates AI still images and animates them during FFmpeg rendering. A true text-to-video clip provider is not included in this change; that requires a separate provider account/API key and may incur usage charges.
+
+
+## Version 1.0.3 changes
+
+- Added 1:1 square video output (1080×1080 render canvas), with 9:16 at 1080×1920 and 16:9 at 1920×1080.
+- Added scene reorder controls, per-field copy actions, scene quality checks, and scene edit Undo/Redo history.
+- Added Home / New 16:9 Video / About bottom navigation.
+- Updated Android version to 1.0.3 (versionCode 4).
+- Android build workflow now also runs when web/server source files change.
+
+Note: AI scene generation requires a valid `GEMINI_API_KEY` configured as a Render environment secret. This archive does not include API keys or signing keystores.
+
+## Build validation note
+
+The source files were checked for TypeScript/TSX syntax errors and JSON validity. A full Vite/TypeScript dependency-aware build and Android Gradle APK build were not completed in the packaging environment because npm registry access was unavailable and the Android SDK/signing secrets are not included in this source archive. Run the GitHub Actions workflow with the repository's Android signing secrets to produce the signed APK; deploy the server to Render with `GEMINI_API_KEY` configured to enable Gemini scene generation.

@@ -22,6 +22,7 @@ export function PreviewExportView({
 
   const hasRealMp4 = Boolean(project.mp4Url);
   const isVertical = project.format.id === 'shorts_9_16';
+  const isSquare = project.format.id === 'square_1_1';
 
   const handlePlayWithSound = () => {
     const el = videoRef.current;
@@ -65,6 +66,31 @@ export function PreviewExportView({
     } finally {
       setDownloadingMp4(false);
     }
+  };
+
+
+  const handleDownloadThumbnail = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const gradient = ctx.createLinearGradient(0, 0, 1280, 720);
+    gradient.addColorStop(0, '#061A3A');
+    gradient.addColorStop(0.55, '#064992');
+    gradient.addColorStop(1, '#071126');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 1280, 720);
+    ctx.fillStyle = '#FFC928'; ctx.fillRect(0, 0, 1280, 18);
+    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 34px sans-serif'; ctx.fillText('DISHA MANCH', 64, 90);
+    const title = (project.topicPrompt || 'हिंदी वीडियो').replace(/\s+/g, ' ').trim();
+    const words = title.split(' '); let lines: string[] = []; let line = '';
+    for (const word of words) { const candidate = line ? `${line} ${word}` : word; if (ctx.measureText(candidate).width > 1120 && line) { lines.push(line); line = word; } else line = candidate; }
+    if (line) lines.push(line);
+    ctx.font = 'bold 76px sans-serif'; ctx.fillStyle = '#FFC928';
+    lines.slice(0, 3).forEach((item, index) => ctx.fillText(item, 64, 270 + index * 100));
+    ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 28px sans-serif'; ctx.fillText(`${project.format.ratioLabel}  •  ${project.sceneCount} SCENES`, 66, 650);
+    ctx.fillStyle = '#F97316'; ctx.fillRect(0, 700, 1280, 20);
+    canvas.toBlob((blob) => { if (!blob) return; const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `hvs-thumbnail-${project.id.slice(0, 8)}.png`; a.click(); URL.revokeObjectURL(url); }, 'image/png');
   };
 
   const handleDownloadJson = () => {
@@ -127,7 +153,7 @@ export function PreviewExportView({
                 e.currentTarget.volume = 1.0;
               }}
               className={`rounded-xl bg-black ${
-                isVertical ? 'aspect-[9/16] max-h-[440px]' : 'aspect-video w-full'
+                isVertical ? 'aspect-[9/16] max-h-[440px]' : isSquare ? 'aspect-square max-h-[440px]' : 'aspect-video w-full'
               }`}
             />
           </div>
@@ -214,6 +240,14 @@ export function PreviewExportView({
 
       {/* Export & Management Actions */}
       <div className="space-y-2.5">
+        <button
+          type="button"
+          onClick={handleDownloadThumbnail}
+          className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-[#F97316]/50 bg-[#F97316]/10 px-4 text-sm font-semibold text-[#FDBA74] hover:bg-[#F97316]/20"
+        >
+          <span>Generate &amp; Download Thumbnail (PNG)</span>
+        </button>
+
         <button
           type="button"
           onClick={handleDownloadJson}

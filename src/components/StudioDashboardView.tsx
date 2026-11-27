@@ -39,6 +39,11 @@ interface StudioDashboardViewProps {
   onSceneScreenTextChange: (index: number, value: string) => void;
   onAddSceneSlot: () => void;
   onClearAllScenes: () => void;
+  onMoveScene: (index: number, direction: -1 | 1) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   onGenerateClick: () => void;
 }
 
@@ -61,6 +66,11 @@ export function StudioDashboardView({
   onSceneScreenTextChange,
   onAddSceneSlot,
   onClearAllScenes,
+  onMoveScene,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   onGenerateClick,
 }: StudioDashboardViewProps) {
   const [previewingKey, setPreviewingKey] = useState<string | null>(null);
@@ -190,7 +200,7 @@ export function StudioDashboardView({
                 className="w-full object-cover"
               />
               <div className="py-2 text-center text-[11px] text-[#94A3B8]">
-                Middle canvas renders your scene visuals + voice subtitles cleanly
+                Middle canvas renders scene visuals + animated key text only
               </div>
               <img
                 src={BRAND_9_16_FOOTER_IMG}
@@ -327,6 +337,8 @@ export function StudioDashboardView({
           </div>
 
           <div className="flex items-center gap-2">
+            <button type="button" onClick={onUndo} disabled={!canUndo} className="rounded-lg border border-[#334155] px-2 py-1 text-[10px] text-slate-200 disabled:opacity-30">Undo</button>
+            <button type="button" onClick={onRedo} disabled={!canRedo} className="rounded-lg border border-[#334155] px-2 py-1 text-[10px] text-slate-200 disabled:opacity-30">Redo</button>
             <span className="font-mono-tabular rounded-lg border border-[#3B82F6]/35 bg-[#2563EB]/15 px-2.5 py-1 text-[11px] font-semibold text-[#60A5FA]">
               {activeSceneCount} / {sceneDrafts.length} Active
             </span>
@@ -366,7 +378,10 @@ export function StudioDashboardView({
                     Scene {String(sceneNumber).padStart(2, '0')}
                     {isFilled ? ' · Active' : ' · Optional'}
                   </span>
-                  {scene.voiceScript.trim().length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <button type="button" disabled={idx === 0} onClick={() => onMoveScene(idx, -1)} className="rounded-md border border-[#334155] px-2 py-1 text-[10px] text-slate-300 disabled:opacity-30">↑</button>
+                    <button type="button" disabled={idx === sceneDrafts.length - 1} onClick={() => onMoveScene(idx, 1)} className="rounded-md border border-[#334155] px-2 py-1 text-[10px] text-slate-300 disabled:opacity-30">↓</button>
+                    {scene.voiceScript.trim().length > 0 && (
                     <button
                       type="button"
                       onClick={() =>
@@ -383,6 +398,7 @@ export function StudioDashboardView({
                       <span>{previewingKey === listenKey ? 'Playing...' : 'Listen Voice'}</span>
                     </button>
                   )}
+                  </div>
                 </div>
 
                 {/* Visual Prompt Field */}
@@ -401,6 +417,7 @@ export function StudioDashboardView({
                     placeholder={`Scene ${sceneNumber} में क्या दिखाना है लिखें (जैसे: 3D अंतरिक्ष यान चांद पर उतरते हुए)...`}
                     className="w-full resize-y rounded-lg border border-[#1E293B] bg-[#0B1222] px-3 py-2 text-xs leading-relaxed text-[#F8FAFC] placeholder-[#475569] focus:border-[#3B82F6] focus:outline-none"
                   />
+                  <button type="button" onClick={() => void navigator.clipboard?.writeText(scene.visualPrompt)} className="text-[10px] font-semibold text-[#60A5FA]">Copy Visual Prompt</button>
                 </div>
 
                 {/* Voice-Over Script Field */}
@@ -419,6 +436,7 @@ export function StudioDashboardView({
                     placeholder={`Scene ${sceneNumber} के लिए हिंदी/हिंग्लिश वॉइस-ओवर स्क्रिप्ट लिखें...`}
                     className="w-full resize-y rounded-lg border border-[#1E293B] bg-[#0B1222] px-3 py-2 text-xs leading-relaxed text-[#F8FAFC] placeholder-[#475569] focus:border-[#F97316] focus:outline-none"
                   />
+                  <button type="button" onClick={() => void navigator.clipboard?.writeText(scene.voiceScript)} className="text-[10px] font-semibold text-[#FDBA74]">Copy Voiceover</button>
                 </div>
 
                 {/* On-Screen Animated Text Field */}
@@ -437,10 +455,15 @@ export function StudioDashboardView({
                     placeholder={`Scene ${sceneNumber} में स्क्रीन पर दिखने वाला टेक्स्ट लिखें (खाली छोड़ने पर Voice-Over स्क्रिप्ट एनीमेट होगी)...`}
                     className="w-full resize-y rounded-lg border border-[#1E293B] bg-[#0B1222] px-3 py-2 text-xs leading-relaxed text-[#F8FAFC] placeholder-[#475569] focus:border-[#10B981] focus:outline-none"
                   />
+                  <button type="button" onClick={() => void navigator.clipboard?.writeText(scene.screenText)} className="text-[10px] font-semibold text-[#34D399]">Copy Screen Text</button>
                 </div>
               </div>
             );
           })}
+        </div>
+
+        <div className="rounded-xl border border-[#334155] bg-[#0A1328] p-3 text-[11px] text-[#CBD5E1]">
+          <strong className="text-[#FCD34D]">Quality Check:</strong> {activeSceneCount === 0 ? 'पहले कम से कम एक सीन भरें।' : `${activeSceneCount} सीन तैयार हैं।`} {sceneDrafts.filter(s => !s.voiceScript.trim()).length > 0 ? `${sceneDrafts.filter(s => !s.voiceScript.trim()).length} खाली Voice-over वाले स्लॉट हैं; वीडियो बनाने से पहले हर सक्रिय सीन में आवाज़ जाँचें।` : 'सभी सक्रिय सीन में Voice-over मौजूद है।'}
         </div>
 
         <button

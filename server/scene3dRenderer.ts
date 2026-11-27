@@ -1926,7 +1926,7 @@ export function buildCaptionOverlaySvg(params: {
     voiceScript
   } = params;
 
-  const cleanText = (screenText || voiceScript).trim();
+  const cleanText = screenText.trim();
 
   if (!cleanText) {
     return `
@@ -2002,7 +2002,7 @@ export function buildAnimatedScreenTextAss(params: {
     wordTimings
   } = params;
 
-  const cleanText = (screenText || voiceScript).trim();
+  const cleanText = screenText.trim();
 
   if (!cleanText) return null;
 

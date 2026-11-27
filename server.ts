@@ -297,12 +297,13 @@ async function processRenderJob(
   fs.mkdirSync(jobDir, { recursive: true });
 
   const isVertical = payload.formatId === 'shorts_9_16';
-  const outW = isVertical ? 720 : 1280;
-  const outH = isVertical ? 1280 : 720;
+  const isSquare = payload.formatId === 'square_1_1';
+  const outW = isVertical ? 1080 : isSquare ? 1080 : 1920;
+  const outH = isVertical ? 1920 : isSquare ? 1080 : 1080;
   const useLocked916Brand =
     isVertical && fs.existsSync(BRAND_HEADER_9_16) && fs.existsSync(BRAND_FOOTER_9_16);
-  const headerH = useLocked916Brand ? 133 : 0;
-  const footerH = useLocked916Brand ? 131 : 0;
+  const headerH = useLocked916Brand ? 200 : 0;
+  const footerH = useLocked916Brand ? 196 : 0;
   const midW = outW;
   const midH = outH - headerH - footerH;
   const bgW = Math.round(midW * 1.1);
@@ -908,7 +909,7 @@ async function startServer() {
       return;
     }
 
-    const formatId = body.formatId === 'youtube_16_9' ? 'youtube_16_9' : 'shorts_9_16';
+    const formatId = body.formatId === 'youtube_16_9' ? 'youtube_16_9' : body.formatId === 'square_1_1' ? 'square_1_1' : 'shorts_9_16';
     const videoType = typeof body.videoType === 'string' ? body.videoType : '3d_realistic';
 
     const jobId = `hvs_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

@@ -1,7 +1,7 @@
 export type StudioTab = 'studio' | 'library';
 export type ActiveScreen = 'dashboard' | 'progress' | 'preview';
 
-export type VideoFormatId = 'shorts_9_16' | 'youtube_16_9';
+export type VideoFormatId = 'shorts_9_16' | 'youtube_16_9' | 'square_1_1';
 
 export interface VideoFormatOption {
   id: VideoFormatId;
@@ -125,6 +125,13 @@ export const VIDEO_FORMATS: VideoFormatOption[] = [
     resolution: '1920×1080',
     subtitle: 'Widescreen landscape',
   },
+  {
+    id: 'square_1_1',
+    title: 'Square Social Video',
+    ratioLabel: '1:1',
+    resolution: '1080×1080',
+    subtitle: 'Instagram / Facebook feed',
+  },
 ];
 
 export const VIDEO_TYPES: VideoTypeOption[] = [
@@ -210,28 +217,10 @@ export const HINDI_VOICES: HindiVoiceOption[] = [
 
 export const SCRIPT_AI_PROVIDERS: ScriptAiOption[] = [
   {
-    id: 'ollama_local',
-    name: 'Ollama (Local Llama 3 / Qwen)',
-    costLabel: 'Free · Self-Hosted',
-    notes: 'Runs locally on your Render Node',
-  },
-  {
-    id: 'hf_free',
-    name: 'HuggingFace Free Inference',
-    costLabel: 'Free Tier',
-    notes: 'Open-weight Hindi & multilingual models',
-  },
-  {
-    id: 'openrouter_free',
-    name: 'OpenRouter (Free Models)',
-    costLabel: 'Free Quota',
-    notes: 'Zero-cost community endpoints',
-  },
-  {
-    id: 'manual_script',
-    name: 'Manual / Direct Prompt',
-    costLabel: '100% Offline',
-    notes: 'No external AI required',
+    id: 'gemini_flash',
+    name: 'Google Gemini 2.5 Flash',
+    costLabel: 'Free quota available',
+    notes: 'Requires GEMINI_API_KEY in Render environment',
   },
 ];
 
