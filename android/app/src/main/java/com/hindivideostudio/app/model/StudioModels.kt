@@ -5,7 +5,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class StudioTab {
     STUDIO,
-    LIBRARY
+    LIBRARY,
+    ABOUT
 }
 
 @Serializable
