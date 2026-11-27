@@ -1,8 +1,9 @@
 /** Split a complete script into narration-sized pieces without imposing a character cap.
  * Sentence boundaries are preferred; exceptionally long sentences are split at word boundaries.
+ * The 360-character default keeps each visual prompt focused and prevents silent prompt truncation.
  * The original words and their order are preserved.
  */
-export function splitFullScriptIntoScenes(script: string, maxChars = 560): Array<{ visualPrompt: string; voiceScript: string; screenText: string }> {
+export function splitFullScriptIntoScenes(script: string, maxChars = 360): Array<{ visualPrompt: string; voiceScript: string; screenText: string }> {
   const normalized = script.replace(/\r\n?/g, '\n').trim();
   if (!normalized) return [];
   // Split only after sentence punctuation followed by whitespace; decimals and version numbers stay intact.
