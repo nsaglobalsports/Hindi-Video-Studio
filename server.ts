@@ -524,7 +524,7 @@ async function processRenderJob(
       job.stage = `Encoding scene ${i} of ${totalScenes} (${payload.videoType}) with animated text & audio...`;
 
       const audioFilter = prep.hasSpeechAudio
-        ? `[2:a]aresample=44100,aformat=channel_layouts=stereo,highpass=f=75,silenceremove=start_periods=1:start_threshold=-55dB:detection=peak,volume=2.8,alimiter=limit=0.95,apad,atrim=0:${sceneDurationSec}[a]`
+        ? `[2:a]aresample=44100,aformat=channel_layouts=stereo,highpass=f=75,volume=2.8,alimiter=limit=0.95,apad,atrim=0:${sceneDurationSec}[a]`
         : `[2:a]aresample=44100,aformat=channel_layouts=stereo,atrim=0:${sceneDurationSec}[a]`;
 
       const assStep = assContent ? `,ass='${assPath.replace(/'/g, "\\'")}'` : '';
@@ -565,7 +565,7 @@ async function processRenderJob(
         '-t',
         String(sceneDurationSec),
         '-threads',
-        '0',
+        '2',
         '-r',
         String(fps),
         '-c:v',
