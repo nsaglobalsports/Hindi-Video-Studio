@@ -121,11 +121,7 @@ class MainActivity : ComponentActivity() {
                                             onSelectStyle = viewModel::selectStyle,
                                             onSelectVoice = viewModel::selectVoice,
                                             onSelectScriptAi = viewModel::selectScriptAi,
-                                            onSceneVisualChange = viewModel::updateSceneVisual,
-                                            onSceneVoiceChange = viewModel::updateSceneVoice,
-                                            onSceneScreenTextChange = viewModel::updateSceneScreenText,
-                                            onAddSceneSlot = viewModel::addSceneSlot,
-                                            onClearAllScenes = viewModel::clearAllScenes,
+                                            onScriptChange = viewModel::updateScriptText,
                                             onGenerateClick = viewModel::onGenerateHindiVideoClick
                                         )
 

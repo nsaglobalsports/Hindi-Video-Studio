@@ -14,6 +14,7 @@ import {
 import type { VoiceWordTiming } from './server/scene3dRenderer.ts';
 import { generateTopicFacts } from './server/topicFacts.ts';
 import { generateSceneVisualAsset } from './server/visualGenerator.ts';
+import { splitFullScriptIntoScenes } from './server/scriptChunker.ts';
 
 const execFileAsync = promisify(execFile);
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,7 @@ interface IncomingSceneInput {
 
 interface RenderRequestBody {
   topicPrompt?: string;
+  scriptText?: string;
   formatId?: string;
   aspectRatio?: string;
   videoType?: string;
@@ -71,10 +73,11 @@ async function detectFfmpeg(): Promise<string | null> {
 }
 
 function escapeXmlForSsml(input: string): string {
+  // Preserve the user's wording; only escape XML metacharacters required by SSML.
   return input
-    .replace(/&/g, ' और ')
-    .replace(/[<>]/g, ' ')
-    .replace(/["']/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -160,7 +163,7 @@ async function runEdgeTtsAttempt(
       });
     }
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('EdgeTTS timeout')), 14000);
+      const timer = setTimeout(() => reject(new Error('EdgeTTS timeout')), 30000);
       audioStream.on('data', (chunk: Buffer) => chunks.push(chunk));
       audioStream.on('end', () => {
         clearTimeout(timer);
@@ -195,7 +198,7 @@ async function synthesizeHindiSpeechMp3(
   voiceId: string,
   outputMp3Path: string
 ): Promise<{ ok: boolean; wordTimings: VoiceWordTiming[] }> {
-  const safeText = escapeXmlForSsml(rawText).slice(0, 750);
+  const safeText = escapeXmlForSsml(rawText);
   if (!safeText) return { ok: false, wordTimings: [] };
 
   const voiceCfg = getEdgeVoiceConfig(voiceId);
@@ -232,23 +235,31 @@ async function synthesizeHindiSpeechMp3(
     if (current) textChunks.push(current);
 
     const mp3Buffers: Buffer[] = [];
-    for (const chunkText of textChunks.slice(0, 5)) {
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(
-        chunkText
-      )}`;
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36',
-          Referer: 'https://translate.google.com/',
-        },
-      });
-      if (res.ok) {
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length > 400) mp3Buffers.push(buf);
+    for (const chunkText of textChunks) {
+      let chunkBuffer: Buffer | null = null;
+      for (let attempt = 1; attempt <= 2 && !chunkBuffer; attempt += 1) {
+        try {
+          const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(chunkText)}`;
+          const res = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36',
+              Referer: 'https://translate.google.com/',
+            },
+          });
+          if (res.ok) {
+            const buf = Buffer.from(await res.arrayBuffer());
+            if (buf.length > 400) chunkBuffer = buf;
+          }
+        } catch (chunkError) {
+          if (attempt === 2) throw chunkError;
+        }
       }
+      // Never mark a partial narration as successful: every text chunk must have audio.
+      if (!chunkBuffer) throw new Error('Google TTS did not return audio for every script chunk.');
+      mp3Buffers.push(chunkBuffer);
     }
 
-    if (mp3Buffers.length > 0) {
+    if (mp3Buffers.length === textChunks.length && mp3Buffers.length > 0) {
       fs.writeFileSync(outputMp3Path, Buffer.concat(mp3Buffers));
       return { ok: true, wordTimings: [] };
     }
@@ -278,6 +289,27 @@ async function probeAudioDurationSec(audioPath: string): Promise<number> {
     // ignore ffprobe fallback
   }
   return 3.5;
+}
+
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  let firstError: unknown = null;
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async () => {
+    while (firstError === null) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      try {
+        results[index] = await worker(items[index], index);
+      } catch (error) {
+        firstError = error;
+        return;
+      }
+    }
+  });
+  await Promise.all(workers);
+  if (firstError !== null) throw firstError;
+  return results;
 }
 
 async function processRenderJob(
@@ -316,11 +348,13 @@ async function processRenderJob(
   try {
     job.status = 'rendering';
     job.progress = 8;
-    job.stage = `Generating AI visuals from your Visual Prompts (${payload.videoType}) & Hindi voiceover...`;
+    job.stage = `Automatically planning visuals, Hindi voiceover and synchronized captions (${payload.videoType})...`;
 
     let completedPrep = 0;
-    const preparedScenes = await Promise.all(
-      activeScenes.map(async (sceneItem, idx) => {
+    const preparedScenes = await mapWithConcurrency(
+      activeScenes,
+      3,
+      async (sceneItem, idx) => {
         const sceneNum = idx + 1;
         const voiceScript = sceneItem.voiceScript.trim();
         const screenText = sceneItem.screenText.trim();
@@ -338,7 +372,7 @@ async function processRenderJob(
             bgW,
             bgH,
             jobDir,
-            staggerMs: idx * 900,
+            staggerMs: (idx % 3) * 900,
           }),
           voiceScript.length > 0
             ? synthesizeHindiSpeechMp3(voiceScript, payload.voiceId, audioMp3Path)
@@ -369,7 +403,7 @@ async function processRenderJob(
           wordTimings: ttsResult.wordTimings,
           visualAsset,
         };
-      })
+      }
     );
 
     const clipPaths: string[] = [];
@@ -593,7 +627,7 @@ async function processRenderJob(
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '20mb' }));
 
   app.use((_req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -880,7 +914,9 @@ async function startServer() {
     let normalizedScenes: Array<{ visualPrompt: string; voiceScript: string; screenText: string }> =
       [];
 
-    if (Array.isArray(body.scenes) && body.scenes.length > 0) {
+    if (typeof body.scriptText === 'string' && body.scriptText.trim().length > 0) {
+      normalizedScenes = splitFullScriptIntoScenes(body.scriptText);
+    } else if (Array.isArray(body.scenes) && body.scenes.length > 0) {
       normalizedScenes = body.scenes
         .map((s) => ({
           visualPrompt: typeof s?.visualPrompt === 'string' ? s.visualPrompt.trim() : '',
@@ -890,12 +926,11 @@ async function startServer() {
         .filter(
           (s) => s.visualPrompt.length > 0 || s.voiceScript.length > 0 || s.screenText.length > 0
         )
-        .slice(0, 30);
+;
     } else if (Array.isArray(body.sceneScripts) && body.sceneScripts.length > 0) {
       normalizedScenes = body.sceneScripts
         .map((s) => (typeof s === 'string' ? s.trim() : ''))
         .filter((s) => s.length > 0)
-        .slice(0, 30)
         .map((text) => ({ visualPrompt: text, voiceScript: text, screenText: text }));
     } else if (typeof body.topicPrompt === 'string' && body.topicPrompt.trim().length > 0) {
       const t = body.topicPrompt.trim();
@@ -904,7 +939,7 @@ async function startServer() {
 
     if (normalizedScenes.length === 0) {
       res.status(400).json({
-        error: 'Fill at least one scene with a Visual Prompt, Voice-Over Script, or On-Screen Text',
+        error: 'कृपया पूरी स्क्रिप्ट लिखें या पेस्ट करें।',
       });
       return;
     }

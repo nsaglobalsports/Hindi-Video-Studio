@@ -36,6 +36,9 @@ type SceneVisualSubject =
   | 'bank'
   | 'stock'
   | 'currency'
+  | 'farm'
+  | 'education'
+  | 'sports'
   | 'generic';
 
 function detectSceneTheme(combinedText: string): SceneVisualTheme {
@@ -116,13 +119,13 @@ function detectSceneTheme(combinedText: string): SceneVisualTheme {
       'सुबह', 'स्वास्थ्य', 'योग', 'धूप',
       'जल', 'नदी', 'पर्वत', 'हिमालय',
       'जंगल', 'पेड़', 'प्रकृति', 'पर्यावरण',
-      'जलवायु', 'पृथ्वी'
+      'जलवायु', 'पृथ्वी', 'किसान', 'खेती', 'कृषि', 'फसल', 'खेत', 'ट्रैक्टर'
     ) ||
     hasEnglish(
       'morning', 'health', 'yoga', 'nature',
       'sunlight', 'water', 'river', 'mountain',
       'forest', 'tree', 'climate', 'earth',
-      'environment', 'wildlife', 'ocean'
+      'environment', 'wildlife', 'ocean', 'farmer', 'farming', 'agriculture', 'crop', 'tractor'
     )
   ) {
     return 'nature';
@@ -242,6 +245,11 @@ function detectSceneSubject(combinedText: string): SceneVisualSubject {
 
   // NATURE
   if (
+    hasHindi('किसान', 'खेती', 'कृषि', 'फसल', 'खेत', 'ट्रैक्टर') ||
+    hasEnglish('farmer', 'farming', 'agriculture', 'crop', 'tractor')
+  ) return 'farm';
+
+  if (
     hasHindi('नदी', 'गंगा', 'यमुना', 'नर्मदा', 'ब्रह्मपुत्र') ||
     hasEnglish('river', 'waterfall', 'ganges', 'yamuna')
   ) return 'river';
@@ -265,6 +273,16 @@ function detectSceneSubject(combinedText: string): SceneVisualSubject {
     hasHindi('सौर ऊर्जा', 'सोलर पैनल', 'सूर्य ऊर्जा') ||
     hasEnglish('solar energy', 'solar panel', 'solar power')
   ) return 'solar';
+
+  if (
+    hasHindi('परीक्षा', 'छात्र', 'विद्यार्थी', 'स्कूल', 'कॉलेज', 'पढ़ाई', 'किताब') ||
+    hasEnglish('exam', 'student', 'school', 'college', 'education', 'textbook')
+  ) return 'education';
+
+  if (
+    hasHindi('खेल', 'खिलाड़ी', 'क्रिकेट', 'फुटबॉल', 'बैडमिंटन', 'बास्केटबॉल') ||
+    hasEnglish('sports', 'athlete', 'cricket', 'football', 'badminton', 'basketball')
+  ) return 'sports';
 
   // ECONOMY
   if (
@@ -1410,6 +1428,43 @@ function buildSubjectVisualLayer(
           <circle r="${s * 1.2}" fill="#FBBF24" stroke="${stroke}" stroke-width="${strokeWidth}"/>
           <text x="0" y="${s * 0.42}" text-anchor="middle"
             font-size="${s * 1.25}" font-weight="bold" fill="#78350F">₹</text>
+        </g>
+      `;
+      break;
+
+    case 'farm':
+      visual = `
+        <g>
+          <circle cx="${cx + s * 1.25}" cy="${cy - s * 1.1}" r="${s * 0.42}" fill="#FBBF24"/>
+          <path d="M ${cx - s * 2.2} ${cy + s * 1.05} Q ${cx} ${cy + s * 0.1} ${cx + s * 2.2} ${cy + s * 1.05} L ${cx + s * 2.2} ${cy + s * 1.8} L ${cx - s * 2.2} ${cy + s * 1.8} Z" fill="#15803D"/>
+          <path d="M ${cx - s * 1.7} ${cy + s * 1.7} Q ${cx} ${cy + s * 0.65} ${cx + s * 1.7} ${cy + s * 1.7}" fill="none" stroke="#86EFAC" stroke-width="10"/>
+          <g transform="translate(${cx},${cy + s * 0.15})">
+            <circle cx="${-s * 0.85}" cy="${s * 0.95}" r="${s * 0.38}" fill="#0F172A" stroke="#CBD5E1" stroke-width="5"/>
+            <circle cx="${s * 0.75}" cy="${s * 0.95}" r="${s * 0.27}" fill="#0F172A" stroke="#CBD5E1" stroke-width="5"/>
+            <rect x="${-s * 1.05}" y="${s * 0.1}" width="${s * 1.8}" height="${s * 0.55}" rx="10" fill="#F97316" stroke="${stroke}" stroke-width="5"/>
+            <rect x="${-s * 0.35}" y="${-s * 0.55}" width="${s * 0.85}" height="${s * 0.7}" rx="8" fill="#38BDF8" stroke="${stroke}" stroke-width="5"/>
+          </g>
+        </g>
+      `;
+      break;
+
+    case 'education':
+      visual = `
+        <g transform="translate(${cx},${cy})">
+          <path d="M ${-s * 1.9} ${-s * 0.65} L 0 ${-s * 1.45} L ${s * 1.9} ${-s * 0.65} L 0 ${s * 0.15} Z" fill="#FBBF24" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+          <path d="M ${-s * 1.25} ${-s * 0.35} V ${s * 1.15} Q 0 ${s * 1.8} ${s * 1.25} ${s * 1.15} V ${-s * 0.35}" fill="#2563EB" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+          <path d="M ${s * 1.9} ${-s * 0.65} V ${s * 0.65}" stroke="#F97316" stroke-width="8"/>
+          <circle cx="${s * 1.9}" cy="${s * 0.78}" r="10" fill="#F97316"/>
+        </g>
+      `;
+      break;
+
+    case 'sports':
+      visual = `
+        <g transform="translate(${cx},${cy})">
+          <circle r="${s * 1.25}" fill="#F8FAFC" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+          <path d="M 0 ${-s * 0.48} L ${s * 0.46} ${-s * 0.15} L ${s * 0.28} ${s * 0.4} L ${-s * 0.28} ${s * 0.4} L ${-s * 0.46} ${-s * 0.15} Z" fill="#1E293B"/>
+          <path d="M 0 ${-s * 0.48} L 0 ${-s * 1.2} M ${s * 0.46} ${-s * 0.15} L ${s * 1.18} ${-s * 0.38} M ${s * 0.28} ${s * 0.4} L ${s * 0.72} ${s * 1.02} M ${-s * 0.28} ${s * 0.4} L ${-s * 0.72} ${s * 1.02} M ${-s * 0.46} ${-s * 0.15} L ${-s * 1.18} ${-s * 0.38}" fill="none" stroke="#1E293B" stroke-width="7"/>
         </g>
       `;
       break;

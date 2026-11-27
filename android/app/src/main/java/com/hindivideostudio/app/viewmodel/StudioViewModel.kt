@@ -42,6 +42,7 @@ data class StudioUiState(
     val selectedStyle: VideoStyle = VideoStyle.EDUCATIONAL,
     val selectedVoice: HindiVoice = StudioCatalog.hindiVoices.first(),
     val selectedScriptAi: ScriptAiProvider = StudioCatalog.scriptAiProviders.first(),
+    val scriptText: String = "",
     val sceneDrafts: List<SceneDraftInput> = List(StudioCatalog.DEFAULT_SCENE_SLOTS) { SceneDraftInput() },
     val renderNode: RenderNodeState = RenderNodeState(),
     val isNodeSheetOpen: Boolean = false,
@@ -92,6 +93,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 selectedStyle = VideoStyle.EDUCATIONAL,
                 selectedVoice = StudioCatalog.hindiVoices.first(),
                 selectedScriptAi = StudioCatalog.scriptAiProviders.first(),
+                scriptText = "",
                 sceneDrafts = List(StudioCatalog.DEFAULT_SCENE_SLOTS) { SceneDraftInput() },
                 statusBannerMessage = "Ready for a new Hindi video project"
             )
@@ -116,6 +118,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectScriptAi(provider: ScriptAiProvider) {
         _uiState.update { it.copy(selectedScriptAi = provider) }
+    }
+
+    fun updateScriptText(value: String) {
+        _uiState.update { it.copy(scriptText = value, validationError = null) }
     }
 
     fun updateSceneVisual(index: Int, value: String) {
@@ -199,23 +205,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onGenerateHindiVideoClick() {
         val state = _uiState.value
-        val activeDrafts = state.sceneDrafts.filter {
-            it.visualPrompt.isNotBlank() || it.voiceScript.isNotBlank() || it.screenText.isNotBlank()
-        }
-        if (activeDrafts.isEmpty()) {
-            _uiState.update {
-                it.copy(validationError = "कृपया कम से कम एक सीन में Visual Prompt, Voice-Over Script या On-Screen Text लिखें।")
-            }
+        val script = state.scriptText.trim()
+        if (script.isEmpty()) {
+            _uiState.update { it.copy(validationError = "कृपया पूरी हिंदी स्क्रिप्ट लिखें या पेस्ट करें।") }
             return
         }
-        if (activeDrafts.none { it.voiceScript.isNotBlank() }) {
-            _uiState.update {
-                it.copy(validationError = "वीडियो में आवाज़ जोड़ने के लिए कम से कम एक सीन का Voice-Over Script जरूर लिखें।")
-            }
-            return
-        }
-
-        val draftProject = buildProjectFromState(state, activeDrafts, JobStatus.LOCAL_DRAFT)
+        val draftProject = buildProjectFromState(state, JobStatus.LOCAL_DRAFT)
         // Save immediately so a failed/slow render request never loses the user's project.
         upsertProjectInLibrary(draftProject)
 
@@ -429,29 +424,23 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun buildProjectFromState(
         state: StudioUiState,
-        activeDrafts: List<SceneDraftInput>,
         status: JobStatus
     ): VideoProject {
         val dateStr = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date())
         val perSceneDuration = if (state.selectedFormat == VideoFormat.SHORTS_9_16) 4 else 5
-        val scenes = activeDrafts.mapIndexed { idx, draft ->
-            val vPrompt = draft.visualPrompt.trim()
-            val vScript = draft.voiceScript.trim()
-            val sText = draft.screenText.trim()
-            val effectiveVisual = vPrompt.ifEmpty { vScript.ifEmpty { sText } }
+        val fullScript = state.scriptText.trim()
+        val scenes = listOf(
             ScenePlan(
-                sceneNumber = idx + 1,
+                sceneNumber = 1,
                 durationSec = perSceneDuration,
-                visualPrompt = vPrompt,
-                voiceScript = vScript,
-                screenText = sText,
-                visualCue = "${state.selectedVideoType.displayName} · ${effectiveVisual.take(64)}",
-                narrationPrompt = vScript.ifEmpty { sText.ifEmpty { "(Silent visual scene)" } }
+                visualPrompt = "",
+                voiceScript = fullScript,
+                screenText = "",
+                visualCue = "Automatic visuals from full script",
+                narrationPrompt = fullScript
             )
-        }
-        val title = scenes.firstOrNull()?.voiceScript?.ifBlank {
-            scenes.firstOrNull()?.visualPrompt?.ifBlank { scenes.firstOrNull()?.screenText }
-        } ?: "Hindi Video (${scenes.size} scenes)"
+        )
+        val title = fullScript.lineSequence().firstOrNull()?.take(80)?.ifBlank { "Hindi Video" } ?: "Hindi Video"
         return VideoProject(
             id = UUID.randomUUID().toString(),
             topicPrompt = title,
@@ -463,7 +452,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             voiceLabel = "${state.selectedVoice.name} (${state.selectedVoice.gender})",
             scriptAiId = state.selectedScriptAi.id,
             scriptAiLabel = state.selectedScriptAi.name,
-            sceneCount = scenes.size,
+            sceneCount = 1,
             createdAtIso = dateStr,
             status = status,
             scenes = scenes

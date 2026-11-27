@@ -67,16 +67,10 @@ fun StudioScreen(
     onSelectStyle: (VideoStyle) -> Unit,
     onSelectVoice: (HindiVoice) -> Unit,
     onSelectScriptAi: (ScriptAiProvider) -> Unit,
-    onSceneVisualChange: (Int, String) -> Unit,
-    onSceneVoiceChange: (Int, String) -> Unit,
-    onSceneScreenTextChange: (Int, String) -> Unit,
-    onAddSceneSlot: () -> Unit,
-    onClearAllScenes: () -> Unit,
+    onScriptChange: (String) -> Unit,
     onGenerateClick: () -> Unit
 ) {
-    val activeCount = uiState.sceneDrafts.count {
-        it.visualPrompt.isNotBlank() || it.voiceScript.isNotBlank() || it.screenText.isNotBlank()
-    }
+    val scriptLength = uiState.scriptText.length
 
     Column(
         modifier = Modifier
@@ -88,14 +82,14 @@ fun StudioScreen(
         // Heading
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = "कोई भी विषय, instant Hindi video.",
+                text = "अपनी पूरी स्क्रिप्ट से वीडियो बनाएँ",
                 fontSize = 24.sp,
                 lineHeight = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = StudioColors.TextPrimary
             )
             Text(
-                text = "Fill only the scenes you need (Visual Prompt + Voice-Over Script). Empty scenes are skipped automatically.",
+                text = "पूरी हिंदी स्क्रिप्ट एक बार पेस्ट करें। विजुअल, वॉइसओवर, स्क्रीन टेक्स्ट और सबटाइटल अपने-आप तैयार होंगे।",
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
                 color = StudioColors.TextSecondary
@@ -262,7 +256,7 @@ fun StudioScreen(
             )
         }
 
-        // 5 Default Scene Cards (Visual Prompt + Voice-Over Script) + Add Scene Button
+        // Single direct-script input. Scene planning is handled internally by the Render Node.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -270,168 +264,28 @@ fun StudioScreen(
                 .background(StudioColors.CardSurface)
                 .border(1.dp, StudioColors.BorderHairline, RoundedCornerShape(16.dp))
                 .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Scene Builder (${uiState.sceneDrafts.size} Scenes)",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = StudioColors.TextPrimary
-                    )
-                    Text(
-                        text = "$activeCount / ${uiState.sceneDrafts.size} active — और जोड़ने के लिए नीचे Add Scene दबाएँ",
-                        fontSize = 11.sp,
-                        color = StudioColors.TextSecondary
-                    )
-                }
-
-                if (activeCount > 0) {
-                    Text(
-                        text = "Clear",
-                        color = StudioColors.TextSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(StudioColors.DeepNavyCanvas)
-                            .clickable(onClick = onClearAllScenes)
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
-            }
-
-            uiState.sceneDrafts.forEachIndexed { idx, draft ->
-                val sceneNum = idx + 1
-                val isFilled =
-                    draft.visualPrompt.isNotBlank() || draft.voiceScript.isNotBlank() || draft.screenText.isNotBlank()
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(StudioColors.DeepNavyCanvas)
-                        .border(
-                            1.dp,
-                            if (isFilled) StudioColors.BlueHighlight.copy(alpha = 0.55f) else StudioColors.BorderHairline,
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Scene ${sceneNum.toString().padStart(2, '0')} · ${if (isFilled) "Active" else "Optional"}",
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.SemiBold,
-                        color = StudioColors.BlueHighlight
-                    )
-
-                    OutlinedTextField(
-                        value = draft.visualPrompt,
-                        onValueChange = { onSceneVisualChange(idx, it) },
-                        label = { Text("Visual Prompt", fontSize = 11.sp) },
-                        placeholder = {
-                            Text(
-                                text = "Scene $sceneNum में क्या दिखाना है लिखें...",
-                                color = StudioColors.TextMuted,
-                                fontSize = 12.sp
-                            )
-                        },
-                        minLines = 2,
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = StudioColors.NavyBase,
-                            unfocusedContainerColor = StudioColors.NavyBase,
-                            focusedBorderColor = StudioColors.BlueHighlight,
-                            unfocusedBorderColor = StudioColors.BorderHairline,
-                            focusedTextColor = StudioColors.TextPrimary,
-                            unfocusedTextColor = StudioColors.TextPrimary
-                        )
-                    )
-
-                    OutlinedTextField(
-                        value = draft.voiceScript,
-                        onValueChange = { onSceneVoiceChange(idx, it) },
-                        label = { Text("Voice-Over Script", fontSize = 11.sp) },
-                        placeholder = {
-                            Text(
-                                text = "Scene $sceneNum की बोलने वाली हिंदी स्क्रिप्ट लिखें...",
-                                color = StudioColors.TextMuted,
-                                fontSize = 12.sp
-                            )
-                        },
-                        minLines = 2,
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = StudioColors.NavyBase,
-                            unfocusedContainerColor = StudioColors.NavyBase,
-                            focusedBorderColor = StudioColors.OrangeCta,
-                            unfocusedBorderColor = StudioColors.BorderHairline,
-                            focusedTextColor = StudioColors.TextPrimary,
-                            unfocusedTextColor = StudioColors.TextPrimary
-                        )
-                    )
-
-                    OutlinedTextField(
-                        value = draft.screenText,
-                        onValueChange = { onSceneScreenTextChange(idx, it) },
-                        label = { Text("On-Screen Text (Animated)", fontSize = 11.sp) },
-                        placeholder = {
-                            Text(
-                                text = "Scene $sceneNum में स्क्रीन पर क्या लिखा आए (वॉइस के साथ एनीमेट होगा)...",
-                                color = StudioColors.TextMuted,
-                                fontSize = 12.sp
-                            )
-                        },
-                        minLines = 2,
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = StudioColors.NavyBase,
-                            unfocusedContainerColor = StudioColors.NavyBase,
-                            focusedBorderColor = StudioColors.StatusOnline,
-                            unfocusedBorderColor = StudioColors.BorderHairline,
-                            focusedTextColor = StudioColors.TextPrimary,
-                            unfocusedTextColor = StudioColors.TextPrimary
-                        )
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(StudioColors.DeepNavyCanvas)
-                    .border(1.dp, StudioColors.BorderHairline, RoundedCornerShape(12.dp))
-                    .clickable(onClick = onAddSceneSlot),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = null,
-                    tint = StudioColors.BlueHighlight,
-                    modifier = Modifier.size(18.dp)
+            Text("पूरी हिंदी स्क्रिप्ट", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = StudioColors.TextPrimary)
+            Text("कोई Scene बनाने की जरूरत नहीं। स्क्रिप्ट के अनुसार विजुअल और टेक्स्ट अपने-आप बनेंगे।", fontSize = 12.sp, color = StudioColors.TextSecondary)
+            OutlinedTextField(
+                value = uiState.scriptText,
+                onValueChange = onScriptChange,
+                modifier = Modifier.fillMaxWidth().height(260.dp),
+                placeholder = { Text("यहाँ अपनी पूरी स्क्रिप्ट लिखें या पेस्ट करें...", color = StudioColors.TextMuted) },
+                minLines = 8,
+                maxLines = 16,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = StudioColors.NavyBase,
+                    unfocusedContainerColor = StudioColors.NavyBase,
+                    focusedBorderColor = StudioColors.BlueHighlight,
+                    unfocusedBorderColor = StudioColors.BorderHairline,
+                    focusedTextColor = StudioColors.TextPrimary,
+                    unfocusedTextColor = StudioColors.TextPrimary
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Add Scene ${uiState.sceneDrafts.size + 1}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = StudioColors.BlueHighlight
-                )
-            }
+            )
+            Text("$scriptLength अक्षर · पूरी स्क्रिप्ट प्रोसेस होगी", fontSize = 11.sp, color = StudioColors.TextSecondary)
         }
 
         if (uiState.validationError != null) {
@@ -461,7 +315,7 @@ fun StudioScreen(
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                text = "Generate Hindi Video ($activeCount scenes)",
+                text = "पूरी स्क्रिप्ट से वीडियो बनाएँ",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )

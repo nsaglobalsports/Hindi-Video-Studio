@@ -40,3 +40,14 @@ Note: AI scene generation requires a valid `GEMINI_API_KEY` configured as a Rend
 ## Build validation note
 
 The source files were checked for TypeScript/TSX syntax errors and JSON validity. A full Vite/TypeScript dependency-aware build and Android Gradle APK build were not completed in the packaging environment because npm registry access was unavailable and the Android SDK/signing secrets are not included in this source archive. Run the GitHub Actions workflow with the repository's Android signing secrets to produce the signed APK; deploy the server to Render with `GEMINI_API_KEY` configured to enable Gemini scene generation.
+
+
+## Version 1.0.5 — Direct Script Studio
+
+- Replaced the Android Scene Builder input with one complete-script editor.
+- The Render Node splits long scripts internally at sentence/word boundaries; the full narration is retained across all generated segments.
+- Removed the previous 750-character Edge TTS truncation and the five-chunk Google TTS fallback limit.
+- Removed the 30-scene request truncation for direct scripts.
+- Added bounded render preparation concurrency to reduce TTS/visual-provider overload on long scripts.
+- Uses the full narration text for word-timed Hindi kinetic captions/subtitles.
+- Preserved the existing Disha Manch 9:16 header/footer assets.

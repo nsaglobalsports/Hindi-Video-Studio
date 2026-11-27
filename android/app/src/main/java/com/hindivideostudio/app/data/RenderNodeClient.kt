@@ -30,6 +30,7 @@ data class ScenePayloadItem(
 @Serializable
 data class RenderSubmitPayload(
     val topicPrompt: String,
+    val scriptText: String = "",
     val formatId: String,
     val aspectRatio: String,
     val videoType: String,
@@ -120,6 +121,7 @@ class RenderNodeClient {
 
             val payload = RenderSubmitPayload(
                 topicPrompt = project.topicPrompt,
+                scriptText = project.scenes.firstOrNull()?.voiceScript.orEmpty(),
                 formatId = project.format.id,
                 aspectRatio = project.format.ratioLabel,
                 videoType = project.videoTypeId,
@@ -127,13 +129,8 @@ class RenderNodeClient {
                 voiceId = project.voiceId,
                 scriptAiProvider = project.scriptAiId,
                 sceneCount = project.sceneCount,
-                scenes = project.scenes.map {
-                    ScenePayloadItem(
-                        visualPrompt = it.visualPrompt,
-                        voiceScript = it.voiceScript,
-                        screenText = it.screenText
-                    )
-                }
+                // The complete script is sent once; the server performs internal scene splitting.
+                scenes = emptyList()
             )
 
             val body = json.encodeToString(payload)
