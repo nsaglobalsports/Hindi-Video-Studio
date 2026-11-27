@@ -1,8 +1,10 @@
+
 package com.hindivideostudio.app.data
 
 import com.hindivideostudio.app.model.JobStatus
 import com.hindivideostudio.app.model.VideoProject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -52,44 +54,56 @@ data class RenderJobResponse(
 )
 
 class RenderNodeClient {
+
     private val client = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
+        isLenient = true
     }
 
-    suspend fun checkHealth(baseUrl: String): HealthCheckResult = withContext(Dispatchers.IO) {
-        val normalized = normalizeUrl(baseUrl)
-        if (normalized.isEmpty()) {
-            return@withContext HealthCheckResult(
-                online = false,
-                message = "No Render Node URL configured"
-            )
-        }
+    suspend fun checkHealth(baseUrl: String): HealthCheckResult =
+        withContext(Dispatchers.IO) {
 
-        val start = System.currentTimeMillis()
-        val apiHealthRequest = Request.Builder()
-            .url("$normalized/api/health")
-            .get()
-            .build()
+            val normalized = normalizeUrl(baseUrl)
 
-        try {
-            client.newCall(apiHealthRequest).execute().use { firstResponse ->
-                val response = if (firstResponse.code == 404) {
-                    firstResponse.close()
-                    client.newCall(
-                        Request.Builder().url("$normalized/health").get().build()
+            if (normalized.isEmpty()) {
+                return@withContext HealthCheckResult(
+                    online = false,
+                    message = "No Render Node URL configured"
+                )
+            }
+
+            val start = System.currentTimeMillis()
+
+            try {
+                var response = client.newCall(
+                    Request.Builder()
+                        .url("$normalized/api/health")
+                        .get()
+                        .build()
+                ).execute()
+
+                if (response.code == 404) {
+                    response.close()
+
+                    response = client.newCall(
+                        Request.Builder()
+                            .url("$normalized/health")
+                            .get()
+                            .build()
                     ).execute()
-                } else {
-                    firstResponse
                 }
-                response.use { res ->
+
+                response.use {
                     val elapsed = System.currentTimeMillis() - start
-                    if (res.isSuccessful) {
+
+                    if (it.isSuccessful) {
                         HealthCheckResult(
                             online = true,
                             latencyMs = elapsed,
@@ -99,29 +113,37 @@ class RenderNodeClient {
                         HealthCheckResult(
                             online = false,
                             latencyMs = elapsed,
-                            message = "Node returned HTTP ${res.code}"
+                            message = "Node returned HTTP ${it.code}"
                         )
                     }
                 }
-            }
-        } catch (e: Exception) {
-            HealthCheckResult(
-                online = false,
-                message = e.localizedMessage ?: "Connection unreachable"
-            )
-        }
-    }
 
-    suspend fun submitRenderJob(baseUrl: String, project: VideoProject): Result<RenderJobResponse> =
+            } catch (e: Exception) {
+                HealthCheckResult(
+                    online = false,
+                    message = e.localizedMessage ?: "Connection unreachable"
+                )
+            }
+        }
+
+    suspend fun submitRenderJob(
+        baseUrl: String,
+        project: VideoProject
+    ): Result<RenderJobResponse> =
         withContext(Dispatchers.IO) {
+
             val normalized = normalizeUrl(baseUrl)
+
             if (normalized.isEmpty()) {
-                return@withContext Result.failure(IllegalStateException("Render Node URL is empty"))
+                return@withContext Result.failure(
+                    IllegalStateException("Render Node URL is empty")
+                )
             }
 
             val payload = RenderSubmitPayload(
                 topicPrompt = project.topicPrompt,
-                scriptText = project.scenes.firstOrNull()?.voiceScript.orEmpty(),
+                scriptText = project.scenes.firstOrNull()
+                    ?.voiceScript.orEmpty(),
                 formatId = project.format.id,
                 aspectRatio = project.format.ratioLabel,
                 videoType = project.videoTypeId,
@@ -129,12 +151,13 @@ class RenderNodeClient {
                 voiceId = project.voiceId,
                 scriptAiProvider = project.scriptAiId,
                 sceneCount = project.sceneCount,
-                // The complete script is sent once; the server performs internal scene splitting.
                 scenes = emptyList()
             )
 
             val body = json.encodeToString(payload)
-                .toRequestBody("application/json; charset=utf-8".toMediaType())
+                .toRequestBody(
+                    "application/json; charset=utf-8".toMediaType()
+                )
 
             val request = Request.Builder()
                 .url("$normalized/api/render")
@@ -143,55 +166,171 @@ class RenderNodeClient {
 
             try {
                 client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string().orEmpty()
+
+                    val responseBody =
+                        response.body?.string().orEmpty()
+
                     if (!response.isSuccessful) {
                         return@withContext Result.failure(
-                            IllegalStateException("Render Node HTTP ${response.code}: $responseBody")
+                            IllegalStateException(
+                                "Render Node HTTP ${response.code}: $responseBody"
+                            )
                         )
                     }
-                    val parsed = json.decodeFromString<RenderJobResponse>(responseBody)
-                    Result.success(parsed.copy(mp4Url = resolveMediaUrl(normalized, parsed.mp4Url)))
+
+                    val parsed =
+                        json.decodeFromString<RenderJobResponse>(
+                            responseBody
+                        )
+
+                    Result.success(
+                        parsed.copy(
+                            mp4Url = resolveMediaUrl(
+                                normalized,
+                                parsed.mp4Url
+                            )
+                        )
+                    )
                 }
+
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
 
-    suspend fun pollJobStatus(baseUrl: String, jobId: String): Result<RenderJobResponse> =
+    suspend fun pollJobStatus(
+        baseUrl: String,
+        jobId: String
+    ): Result<RenderJobResponse> =
         withContext(Dispatchers.IO) {
+
             val normalized = normalizeUrl(baseUrl)
+
+            if (normalized.isEmpty()) {
+                return@withContext Result.failure(
+                    IllegalStateException("Render Node URL is empty")
+                )
+            }
+
+            if (jobId.isBlank()) {
+                return@withContext Result.failure(
+                    IllegalStateException("Render Job ID is empty")
+                )
+            }
+
             val request = Request.Builder()
                 .url("$normalized/api/jobs/$jobId")
                 .get()
                 .build()
 
-            try {
-                client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) {
-                        return@withContext Result.failure(
-                            IllegalStateException("Poll HTTP ${response.code}")
+            var lastError: Throwable? = null
+
+            // Retry temporary 404 and server/network errors.
+            val retryDelays = listOf(
+                1200L,
+                2500L,
+                5000L
+            )
+
+            for (attempt in 0..retryDelays.size) {
+
+                val responseResult = runCatching {
+
+                    client.newCall(request).execute().use { response ->
+
+                        val responseBody =
+                            response.body?.string().orEmpty()
+
+                        if (!response.isSuccessful) {
+                            throw IllegalStateException(
+                                "Poll HTTP ${response.code}: $responseBody"
+                            )
+                        }
+
+                        val parsed =
+                            json.decodeFromString<RenderJobResponse>(
+                                responseBody
+                            )
+
+                        parsed.copy(
+                            mp4Url = resolveMediaUrl(
+                                normalized,
+                                parsed.mp4Url
+                            )
                         )
                     }
-                    val parsed = json.decodeFromString<RenderJobResponse>(responseBody)
-                    Result.success(parsed.copy(mp4Url = resolveMediaUrl(normalized, parsed.mp4Url)))
                 }
-            } catch (e: Exception) {
-                Result.failure(e)
+
+                if (responseResult.isSuccess) {
+                    return@withContext Result.success(
+                        responseResult.getOrThrow()
+                    )
+                }
+
+                lastError = responseResult.exceptionOrNull()
+
+                val message = lastError?.message.orEmpty()
+
+                val retryable =
+                    message.contains("Poll HTTP 404") ||
+                    message.contains("Poll HTTP 429") ||
+                    message.contains("Poll HTTP 500") ||
+                    message.contains("Poll HTTP 502") ||
+                    message.contains("Poll HTTP 503") ||
+                    message.contains("Poll HTTP 504") ||
+                    lastError is java.io.IOException
+
+                if (!retryable || attempt == retryDelays.size) {
+                    return@withContext Result.failure(
+                        lastError ?: IllegalStateException(
+                            "Job polling failed"
+                        )
+                    )
+                }
+
+                delay(retryDelays[attempt])
             }
+
+            Result.failure(
+                lastError ?: IllegalStateException(
+                    "Job polling failed"
+                )
+            )
         }
 
-    fun mapRemoteStatus(status: String): JobStatus = when (status.lowercase()) {
-        "completed", "done" -> JobStatus.COMPLETED
-        "failed", "error" -> JobStatus.FAILED
-        "rendering", "processing" -> JobStatus.RENDERING
-        else -> JobStatus.QUEUED
-    }
+    fun mapRemoteStatus(status: String): JobStatus =
+        when (status.lowercase()) {
+            "completed", "done" ->
+                JobStatus.COMPLETED
 
-    private fun resolveMediaUrl(baseUrl: String, mp4Url: String?): String? {
+            "failed", "error" ->
+                JobStatus.FAILED
+
+            "rendering", "processing" ->
+                JobStatus.RENDERING
+
+            else ->
+                JobStatus.QUEUED
+        }
+
+    private fun resolveMediaUrl(
+        baseUrl: String,
+        mp4Url: String?
+    ): String? {
+
         if (mp4Url.isNullOrBlank()) return null
-        if (mp4Url.startsWith("http://") || mp4Url.startsWith("https://")) return mp4Url
-        val path = if (mp4Url.startsWith("/")) mp4Url else "/$mp4Url"
+
+        if (
+            mp4Url.startsWith("http://") ||
+            mp4Url.startsWith("https://")
+        ) {
+            return mp4Url
+        }
+
+        val path =
+            if (mp4Url.startsWith("/")) mp4Url
+            else "/$mp4Url"
+
         return "$baseUrl$path"
     }
 
