@@ -14,6 +14,27 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.AddCircle
+import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -115,6 +136,8 @@ class MainActivity : ComponentActivity() {
                                             onProjectClick = viewModel::openProjectPreview,
                                             onCreateNewClick = viewModel::startNewVideo
                                         )
+
+                                        StudioTab.ABOUT -> AboutScreen()
                                     }
                                 }
 
@@ -150,6 +173,16 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                        }
+
+                        if (uiState.activeScreen == ActiveScreen.MAIN_DASHBOARD) {
+                            StudioBottomBar(
+                                selected = uiState.activeTab,
+                                onHome = { viewModel.selectTab(StudioTab.STUDIO) },
+                                onNewVideo = { viewModel.startNewVideo() },
+                                onLibrary = { viewModel.selectTab(StudioTab.LIBRARY) },
+                                onAbout = { viewModel.selectTab(StudioTab.ABOUT) }
+                            )
                         }
                     }
 
@@ -491,5 +524,90 @@ class MainActivity : ComponentActivity() {
         if (downloadId != -1L && !downloadChecking) {
             waitForDownload(downloadId)
         }
+    }
+}
+
+
+@androidx.compose.runtime.Composable
+private fun StudioBottomBar(
+    selected: StudioTab,
+    onHome: () -> Unit,
+    onNewVideo: () -> Unit,
+    onLibrary: () -> Unit,
+    onAbout: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(StudioColors.NavyBase)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        BottomNavItem("होम", Icons.Rounded.Home, selected == StudioTab.STUDIO, onHome, Modifier.weight(1f))
+        BottomNavItem("लाइब्रेरी", Icons.Rounded.VideoLibrary, selected == StudioTab.LIBRARY, onLibrary, Modifier.weight(1f))
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .weight(1.25f)
+                .padding(horizontal = 4.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(StudioColors.OrangeCta)
+                .clickable(onClick = onNewVideo)
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.AddCircle, contentDescription = "नया वीडियो", tint = Color.White)
+                Spacer(Modifier.width(4.dp))
+                Text("नया वीडियो", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        BottomNavItem("About", Icons.Rounded.Info, selected == StudioTab.ABOUT, onAbout, Modifier.weight(1f))
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun BottomNavItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = label, tint = if (selected) StudioColors.OrangeCta else StudioColors.TextSecondary)
+        Text(label, color = if (selected) StudioColors.TextPrimary else StudioColors.TextSecondary, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun AboutScreen() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(StudioColors.DeepNavyCanvas)
+            .padding(22.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp)
+    ) {
+        Text("Disha Manch", color = StudioColors.OrangeCta, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("Hindi Video Studio", color = StudioColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text("हिंदी स्क्रिप्ट से आकर्षक वीडियो बनाने का आपका क्रिएटिव स्टूडियो।", color = StudioColors.TextSecondary, fontSize = 14.sp, lineHeight = 22.sp)
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(StudioColors.CardSurface).padding(18.dp)
+        ) {
+            Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                Text("मुख्य सुविधाएँ", color = StudioColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("""• हिंदी वॉइसओवर और स्क्रिप्ट
+• 9:16 और 16:9 वीडियो फॉर्मेट
+• AI आधारित विज़ुअल और मोशन ग्राफिक्स
+• प्रोजेक्ट लाइब्रेरी और वीडियो एक्सपोर्ट""", color = StudioColors.TextSecondary, fontSize = 13.sp, lineHeight = 22.sp)
+            }
+        }
+        Text("Version 1.0.4 UI Update", color = StudioColors.TextMuted, fontSize = 11.sp)
     }
 }
