@@ -218,7 +218,7 @@ export const HINDI_VOICES: HindiVoiceOption[] = [
 export const SCRIPT_AI_PROVIDERS: ScriptAiOption[] = [
   {
     id: 'gemini_flash',
-    name: 'Google Gemini 2.5 Flash',
+    name: 'Google Gemini 3.8 Flash',
     costLabel: 'Free quota available',
     notes: 'Requires GEMINI_API_KEY in Render environment',
   },

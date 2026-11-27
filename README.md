@@ -22,7 +22,7 @@ View your app in AI Studio: https://ai.studio/apps/9d03e45c-b813-4671-8ace-ae5bf
 
 ## AI Scene Generator (Gemini)
 
-The Studio includes **Topic से Scenes** and **Script से Scenes** generation using Google Gemini 2.5 Flash. The AI generator requires `GEMINI_API_KEY` in the Render environment; manual scene editing remains available without an AI key. The backend exposes `POST /api/ai-scenes` and calls Gemini 2.5 Flash server-side. Configure `GEMINI_API_KEY` as a secret environment variable on the Render service (do not place the key in frontend code or commit a real key). The generator returns scene-wise English visual prompts, Hindi voice-over scripts, and concise on-screen text.
+The Studio includes **Topic से Scenes** and **Script से Scenes** generation using Google Gemini 3.8 Flash via the Interactions API. The AI generator requires `GEMINI_API_KEY` in the Render environment; manual scene editing remains available without an AI key. The backend exposes `POST /api/ai-scenes` and calls Gemini 3.8 Flash through the Interactions API server-side. Configure `GEMINI_API_KEY` as a secret environment variable on the Render service (do not place the key in frontend code or commit a real key). The generator returns scene-wise English visual prompts, Hindi voice-over scripts, and concise on-screen text.
 
 The existing visual pipeline generates AI still images and animates them during FFmpeg rendering. A true text-to-video clip provider is not included in this change; that requires a separate provider account/API key and may incur usage charges.
 
@@ -51,3 +51,11 @@ The source files were checked for TypeScript/TSX syntax errors and JSON validity
 - Added bounded render preparation concurrency to reduce TTS/visual-provider overload on long scripts.
 - Uses the full narration text for word-timed Hindi kinetic captions/subtitles.
 - Preserved the existing Disha Manch 9:16 header/footer assets.
+
+
+## Version 1.0.6 — Gemini Interactions API migration
+
+- Replaced the retired Gemini 2.5 Flash `generateContent` request with Google's `@google/genai` SDK and the Interactions API.
+- Updated the model identifier to `gemini-3.8-flash`.
+- Added defensive extraction for text returned in the Interactions API response and clear errors for empty or invalid JSON.
+- Updated Android version to 1.0.6 (versionCode 7).

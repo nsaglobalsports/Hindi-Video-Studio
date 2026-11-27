@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import { GoogleGenAI } from '@google/genai';
 import {
   build3DSceneBackgroundSvg,
   buildAnimatedScreenTextAss,
@@ -835,21 +836,43 @@ async function startServer() {
     if (!apiKey) { res.status(503).json({ error: 'AI Scene Generator चालू करने के लिए Render में GEMINI_API_KEY सेट करें।' }); return; }
     const prompt = `आप एक अनुभवी हिंदी वीडियो स्क्रिप्ट राइटर और स्टोरीबोर्ड डायरेक्टर हैं। ${mode === 'topic' ? 'दिए गए विषय पर तथ्यात्मक, रोचक हिंदी वीडियो स्क्रिप्ट बनाएं।' : 'दी गई स्क्रिप्ट का अर्थ और तथ्य बदले बिना उसे दृश्यों में बाँटें।'} कुल ${sceneCount} दृश्य बनाएं। शैली: ${body.style || 'Educational / Explainer'}; दृश्य शैली: ${body.videoType || '3D Realistic Graphics Motion'}। प्रत्येक दृश्य के लिए स्वाभाविक बोलचाल की हिंदी voiceScript (लगभग 12-25 शब्द), स्क्रीन पर दिखने वाला छोटा और प्रभावी screenText (2-7 शब्द), तथा विषय से बिल्कुल मेल खाता विस्तृत English visualPrompt लिखें। Visual prompt में दृश्य, विषय, कैमरा, रोशनी, composition बताएं; image में कोई लिखावट/टेक्स्ट न बनवाएं। तथ्यों को न गढ़ें; अनिश्चित जानकारी को दावा न बनाएं। केवल वैध JSON लौटाएं: {"scenes":[{"visualPrompt":"...","voiceScript":"...","screenText":"..."}]}\n\n${mode === 'topic' ? 'विषय: ' : 'मूल स्क्रिप्ट: '}${input}`;
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.65 } }),
+      // Use Google's current Interactions API. The legacy generateContent endpoint
+      // and Gemini 2.5 Flash are intentionally not used here.
+      const ai = new GoogleGenAI({ apiKey });
+      const interaction = await ai.interactions.create({
+        model: 'gemini-3.8-flash',
+        input: `${prompt}\n\nमहत्वपूर्ण: उत्तर केवल JSON ऑब्जेक्ट हो, Markdown code fence या अतिरिक्त व्याख्या नहीं।`,
       });
-      const payload = await response.json() as any;
-      if (!response.ok) throw new Error(payload?.error?.message || `Gemini API HTTP ${response.status}`);
-      const raw = payload?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '';
-      const parsed = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/, ''));
+      const interactionData = interaction as any;
+      const outputFromSteps = Array.isArray(interactionData.steps)
+        ? interactionData.steps
+            .filter((step: any) => step?.type === 'model_output')
+            .flatMap((step: any) => Array.isArray(step.content) ? step.content : [])
+            .filter((part: any) => part?.type === 'text' && typeof part.text === 'string')
+            .map((part: any) => part.text)
+            .join('')
+        : '';
+      const outputFromOutputs = Array.isArray(interactionData.outputs)
+        ? interactionData.outputs
+            .flatMap((output: any) => Array.isArray(output.content) ? output.content : [])
+            .filter((part: any) => part?.type === 'text' && typeof part.text === 'string')
+            .map((part: any) => part.text)
+            .join('')
+        : '';
+      const raw = String(interactionData.output_text || outputFromSteps || outputFromOutputs || '').trim();
+      if (!raw) throw new Error('Gemini Interactions API ने खाली उत्तर दिया।');
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const jsonStart = cleaned.indexOf('{');
+      const jsonEnd = cleaned.lastIndexOf('}');
+      if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error('Gemini से वैध JSON प्राप्त नहीं हुआ।');
+      const parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
       const scenes = Array.isArray(parsed.scenes) ? parsed.scenes.slice(0, sceneCount).map((scene: any) => ({
         visualPrompt: String(scene.visualPrompt || '').trim(),
         voiceScript: String(scene.voiceScript || '').trim(),
         screenText: String(scene.screenText || '').trim(),
       })).filter((scene: any) => scene.visualPrompt || scene.voiceScript) : [];
       if (scenes.length < 2) throw new Error('AI ने पर्याप्त दृश्य नहीं बनाए। फिर से प्रयास करें।');
-      res.json({ scenes, model: 'gemini-2.5-flash' });
+      res.json({ scenes, model: 'gemini-3.8-flash', api: 'interactions' });
     } catch (error) {
       res.status(502).json({ error: error instanceof Error ? error.message : 'AI scene generation failed' });
     }

@@ -604,6 +604,6 @@ private fun AboutScreen() {
 • प्रोजेक्ट लाइब्रेरी और वीडियो एक्सपोर्ट""", color = StudioColors.TextSecondary, fontSize = 13.sp, lineHeight = 22.sp)
             }
         }
-        Text("Version 1.0.4 UI Update", color = StudioColors.TextMuted, fontSize = 11.sp)
+        Text("Version 1.0.6 Update", color = StudioColors.TextMuted, fontSize = 11.sp)
     }
 }
