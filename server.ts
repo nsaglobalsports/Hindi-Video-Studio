@@ -23,6 +23,7 @@ const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 3000);
 const RENDERS_DIR = path.join(process.cwd(), '.renders');
+const JOBS_FILE = path.join(RENDERS_DIR, 'jobs.json');
 const BRAND_HEADER_9_16 = path.join(process.cwd(), 'public', 'assets', 'aistudio', 'Header_ebc248d3.jpg');
 const BRAND_FOOTER_9_16 = path.join(process.cwd(), 'public', 'assets', 'aistudio', 'Footer_66d0a2aa.jpg');
 fs.mkdirSync(RENDERS_DIR, { recursive: true });
@@ -59,6 +60,45 @@ interface RenderRequestBody {
 }
 
 const jobs = new Map<string, RenderJob>();
+
+function persistJobs(): void {
+  try {
+    const snapshot = Array.from(jobs.values());
+    const tempFile = `${JOBS_FILE}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(snapshot), 'utf8');
+    fs.renameSync(tempFile, JOBS_FILE);
+  } catch (error) {
+    console.error('Unable to persist render jobs:', error);
+  }
+}
+
+function restoreJobs(): void {
+  try {
+    if (!fs.existsSync(JOBS_FILE)) return;
+    const saved = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf8')) as RenderJob[];
+    for (const job of saved) {
+      if (!job || typeof job.jobId !== 'string') continue;
+      // A running FFmpeg process cannot survive a server restart. Preserve the job
+      // record and report a clear failure instead of returning Poll HTTP 404.
+      if (job.status === 'queued' || job.status === 'rendering') {
+        job.status = 'failed';
+        job.stage = 'Render server restarted';
+        job.error = 'Render server restarted before this video finished. Please submit the script again.';
+      }
+      if (job.status === 'completed' && !fs.existsSync(path.join(RENDERS_DIR, `${job.jobId}.mp4`))) {
+        job.status = 'failed';
+        job.mp4Url = null;
+        job.stage = 'Rendered file unavailable';
+        job.error = 'The server no longer has this MP4 file. Please generate the video again.';
+      }
+      jobs.set(job.jobId, job);
+    }
+    persistJobs();
+  } catch (error) {
+    console.error('Unable to restore render jobs:', error);
+  }
+}
+
 let ffmpegVersionCache: string | null = null;
 
 async function detectFfmpeg(): Promise<string | null> {
@@ -349,6 +389,7 @@ async function processRenderJob(
   try {
     job.status = 'rendering';
     job.progress = 8;
+    persistJobs();
     job.stage = `Automatically planning visuals, Hindi voiceover and synchronized captions (${payload.videoType})...`;
 
     let completedPrep = 0;
@@ -618,15 +659,22 @@ async function processRenderJob(
       ? 'MP4 with Hindi voiceover ready for preview & download'
       : 'MP4 rendered (visual-only scenes had no voiceover text)';
     job.mp4Url = `/api/renders/${jobId}.mp4`;
+    persistJobs();
   } catch (err) {
     fs.rmSync(jobDir, { recursive: true, force: true });
     job.status = 'failed';
     job.stage = 'FFmpeg render failed';
     job.error = err instanceof Error ? err.message : 'Unknown FFmpeg error';
+    persistJobs();
   }
 }
 
 async function startServer() {
+  restoreJobs();
+  // Persist progress snapshots so a process restart does not erase every job ID.
+  const jobPersistenceTimer = setInterval(persistJobs, 1000);
+  jobPersistenceTimer.unref();
+
   const app = express();
   app.use(express.json({ limit: '20mb' }));
 
@@ -836,58 +884,13 @@ async function startServer() {
     if (!apiKey) { res.status(503).json({ error: 'AI Scene Generator चालू करने के लिए Render में GEMINI_API_KEY सेट करें।' }); return; }
     const prompt = `आप एक अनुभवी हिंदी वीडियो स्क्रिप्ट राइटर और स्टोरीबोर्ड डायरेक्टर हैं। ${mode === 'topic' ? 'दिए गए विषय पर तथ्यात्मक, रोचक हिंदी वीडियो स्क्रिप्ट बनाएं।' : 'दी गई स्क्रिप्ट का अर्थ और तथ्य बदले बिना उसे दृश्यों में बाँटें।'} कुल ${sceneCount} दृश्य बनाएं। शैली: ${body.style || 'Educational / Explainer'}; दृश्य शैली: ${body.videoType || '3D Realistic Graphics Motion'}। प्रत्येक दृश्य के लिए स्वाभाविक बोलचाल की हिंदी voiceScript (लगभग 12-25 शब्द), स्क्रीन पर दिखने वाला छोटा और प्रभावी screenText (2-7 शब्द), तथा विषय से बिल्कुल मेल खाता विस्तृत English visualPrompt लिखें। Visual prompt में दृश्य, विषय, कैमरा, रोशनी, composition बताएं; image में कोई लिखावट/टेक्स्ट न बनवाएं। तथ्यों को न गढ़ें; अनिश्चित जानकारी को दावा न बनाएं। केवल वैध JSON लौटाएं: {"scenes":[{"visualPrompt":"...","voiceScript":"...","screenText":"..."}]}\n\n${mode === 'topic' ? 'विषय: ' : 'मूल स्क्रिप्ट: '}${input}`;
     try {
-      // Use the Interactions API with bounded retries and supported-model fallback.
-      // Retry transient capacity/rate-limit/server errors before trying the next model.
+      // Use Google's current Interactions API. The legacy generateContent endpoint
+      // and Gemini 2.5 Flash are intentionally not used here.
       const ai = new GoogleGenAI({ apiKey });
-      const modelCandidates = [
-        'gemini-3.8-flash',
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-        'gemini-3.5-flash-lite',
-      ];
-      const requestInput = `${prompt}\n\nमहत्वपूर्ण: उत्तर केवल JSON ऑब्जेक्ट हो, Markdown code fence या अतिरिक्त व्याख्या नहीं।`;
-      const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
-      let interaction: any = null;
-      let selectedModel = '';
-      let lastModelError: unknown = null;
-
-      for (const model of modelCandidates) {
-        let modelSucceeded = false;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            interaction = await ai.interactions.create({
-              model,
-              input: requestInput,
-            });
-            selectedModel = model;
-            modelSucceeded = true;
-            break;
-          } catch (modelError: any) {
-            lastModelError = modelError;
-            const status = Number(
-              modelError?.status ?? modelError?.statusCode ??
-              modelError?.response?.status ?? modelError?.cause?.status ?? 0
-            );
-            const message = String(modelError?.message || modelError || '');
-            const transient = retryableStatuses.has(status) || /\b(503|429|502|504|temporarily unavailable|high demand|overloaded|rate.?limit)\b/i.test(message);
-            if (!transient) {
-              // Invalid model, unsupported API, or authentication errors should not be retried.
-              break;
-            }
-            if (attempt < 2) {
-              const exponentialMs = Math.min(8000, 1000 * (2 ** attempt));
-              const jitterMs = Math.floor(Math.random() * 500);
-              await new Promise(resolve => setTimeout(resolve, exponentialMs + jitterMs));
-            }
-          }
-        }
-        if (modelSucceeded) break;
-      }
-
-      if (!interaction || !selectedModel) {
-        const detail = lastModelError instanceof Error ? lastModelError.message : String(lastModelError || 'Unknown Gemini error');
-        throw new Error(`Gemini के सभी उपलब्ध मॉडल फिलहाल अनुरोध पूरा नहीं कर पाए। कुछ देर बाद पुनः प्रयास करें। विवरण: ${detail}`);
-      }
+      const interaction = await ai.interactions.create({
+        model: 'gemini-3.8-flash',
+        input: `${prompt}\n\nमहत्वपूर्ण: उत्तर केवल JSON ऑब्जेक्ट हो, Markdown code fence या अतिरिक्त व्याख्या नहीं।`,
+      });
       const interactionData = interaction as any;
       const outputFromSteps = Array.isArray(interactionData.steps)
         ? interactionData.steps
@@ -917,7 +920,7 @@ async function startServer() {
         screenText: String(scene.screenText || '').trim(),
       })).filter((scene: any) => scene.visualPrompt || scene.voiceScript) : [];
       if (scenes.length < 2) throw new Error('AI ने पर्याप्त दृश्य नहीं बनाए। फिर से प्रयास करें।');
-      res.json({ scenes, model: selectedModel, api: 'interactions' });
+      res.json({ scenes, model: 'gemini-3.8-flash', api: 'interactions' });
     } catch (error) {
       res.status(502).json({ error: error instanceof Error ? error.message : 'AI scene generation failed' });
     }
@@ -1027,6 +1030,7 @@ async function startServer() {
       createdAt: Date.now(),
     };
     jobs.set(jobId, job);
+    persistJobs();
 
     void processRenderJob(jobId, {
       formatId,
@@ -1043,7 +1047,21 @@ async function startServer() {
     const jobId = String(req.params.jobId || '');
     const job = jobs.get(jobId);
     if (!job) {
-      res.status(404).json({ error: 'Render job not found' });
+      // A persisted record may have been written by a previous process/instance.
+      try {
+        if (fs.existsSync(JOBS_FILE)) {
+          const saved = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf8')) as RenderJob[];
+          const recovered = saved.find((item) => item.jobId === jobId);
+          if (recovered) {
+            jobs.set(jobId, recovered);
+            res.json(recovered);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Unable to recover requested render job:', error);
+      }
+      res.status(404).json({ error: 'Render job not found on this Render instance. Please submit again.' });
       return;
     }
     res.json(job);
