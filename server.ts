@@ -836,13 +836,58 @@ async function startServer() {
     if (!apiKey) { res.status(503).json({ error: 'AI Scene Generator चालू करने के लिए Render में GEMINI_API_KEY सेट करें।' }); return; }
     const prompt = `आप एक अनुभवी हिंदी वीडियो स्क्रिप्ट राइटर और स्टोरीबोर्ड डायरेक्टर हैं। ${mode === 'topic' ? 'दिए गए विषय पर तथ्यात्मक, रोचक हिंदी वीडियो स्क्रिप्ट बनाएं।' : 'दी गई स्क्रिप्ट का अर्थ और तथ्य बदले बिना उसे दृश्यों में बाँटें।'} कुल ${sceneCount} दृश्य बनाएं। शैली: ${body.style || 'Educational / Explainer'}; दृश्य शैली: ${body.videoType || '3D Realistic Graphics Motion'}। प्रत्येक दृश्य के लिए स्वाभाविक बोलचाल की हिंदी voiceScript (लगभग 12-25 शब्द), स्क्रीन पर दिखने वाला छोटा और प्रभावी screenText (2-7 शब्द), तथा विषय से बिल्कुल मेल खाता विस्तृत English visualPrompt लिखें। Visual prompt में दृश्य, विषय, कैमरा, रोशनी, composition बताएं; image में कोई लिखावट/टेक्स्ट न बनवाएं। तथ्यों को न गढ़ें; अनिश्चित जानकारी को दावा न बनाएं। केवल वैध JSON लौटाएं: {"scenes":[{"visualPrompt":"...","voiceScript":"...","screenText":"..."}]}\n\n${mode === 'topic' ? 'विषय: ' : 'मूल स्क्रिप्ट: '}${input}`;
     try {
-      // Use Google's current Interactions API. The legacy generateContent endpoint
-      // and Gemini 2.5 Flash are intentionally not used here.
+      // Use the Interactions API with bounded retries and supported-model fallback.
+      // Retry transient capacity/rate-limit/server errors before trying the next model.
       const ai = new GoogleGenAI({ apiKey });
-      const interaction = await ai.interactions.create({
-        model: 'gemini-3.8-flash',
-        input: `${prompt}\n\nमहत्वपूर्ण: उत्तर केवल JSON ऑब्जेक्ट हो, Markdown code fence या अतिरिक्त व्याख्या नहीं।`,
-      });
+      const modelCandidates = [
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash-lite',
+      ];
+      const requestInput = `${prompt}\n\nमहत्वपूर्ण: उत्तर केवल JSON ऑब्जेक्ट हो, Markdown code fence या अतिरिक्त व्याख्या नहीं।`;
+      const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
+      let interaction: any = null;
+      let selectedModel = '';
+      let lastModelError: unknown = null;
+
+      for (const model of modelCandidates) {
+        let modelSucceeded = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            interaction = await ai.interactions.create({
+              model,
+              input: requestInput,
+            });
+            selectedModel = model;
+            modelSucceeded = true;
+            break;
+          } catch (modelError: any) {
+            lastModelError = modelError;
+            const status = Number(
+              modelError?.status ?? modelError?.statusCode ??
+              modelError?.response?.status ?? modelError?.cause?.status ?? 0
+            );
+            const message = String(modelError?.message || modelError || '');
+            const transient = retryableStatuses.has(status) || /\b(503|429|502|504|temporarily unavailable|high demand|overloaded|rate.?limit)\b/i.test(message);
+            if (!transient) {
+              // Invalid model, unsupported API, or authentication errors should not be retried.
+              break;
+            }
+            if (attempt < 2) {
+              const exponentialMs = Math.min(8000, 1000 * (2 ** attempt));
+              const jitterMs = Math.floor(Math.random() * 500);
+              await new Promise(resolve => setTimeout(resolve, exponentialMs + jitterMs));
+            }
+          }
+        }
+        if (modelSucceeded) break;
+      }
+
+      if (!interaction || !selectedModel) {
+        const detail = lastModelError instanceof Error ? lastModelError.message : String(lastModelError || 'Unknown Gemini error');
+        throw new Error(`Gemini के सभी उपलब्ध मॉडल फिलहाल अनुरोध पूरा नहीं कर पाए। कुछ देर बाद पुनः प्रयास करें। विवरण: ${detail}`);
+      }
       const interactionData = interaction as any;
       const outputFromSteps = Array.isArray(interactionData.steps)
         ? interactionData.steps
@@ -872,7 +917,7 @@ async function startServer() {
         screenText: String(scene.screenText || '').trim(),
       })).filter((scene: any) => scene.visualPrompt || scene.voiceScript) : [];
       if (scenes.length < 2) throw new Error('AI ने पर्याप्त दृश्य नहीं बनाए। फिर से प्रयास करें।');
-      res.json({ scenes, model: 'gemini-3.8-flash', api: 'interactions' });
+      res.json({ scenes, model: selectedModel, api: 'interactions' });
     } catch (error) {
       res.status(502).json({ error: error instanceof Error ? error.message : 'AI scene generation failed' });
     }
